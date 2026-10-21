@@ -1,0 +1,7 @@
+set -eu
+
+mkdir -p /shared/logs
+mkdir -p /shared/state
+
+test -f /shared/phase5f-linear-topology.yaml
+test -x /shared/start-node.sh

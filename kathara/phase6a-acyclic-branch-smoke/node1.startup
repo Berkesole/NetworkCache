@@ -1,0 +1,3 @@
+set -eu
+
+/shared/start-node.sh node1 1 10.50.0.1 "" "${RSYNC_REQUEST_KEYS:-demo_key}"

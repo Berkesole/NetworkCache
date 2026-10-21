@@ -1,0 +1,32 @@
+protocol:
+  max_hop_count: 6
+
+nodes:
+- id: 1
+  neighbors: [2, 3]
+
+- id: 2
+  neighbors: [1, 4, 5]
+
+- id: 3
+  neighbors: [1, 6, 7]
+
+- id: 4
+  neighbors: [2]
+
+- id: 5
+  neighbors: [2]
+
+- id: 6
+  neighbors: [3]
+
+- id: 7
+  neighbors: [3]
+
+scenario:
+  ticks: 16
+  data:
+    - 7:redis_key_a=VALUE_OF_A
+  requests:
+    - 4:redis_key_a@0
+    - 5:redis_key_a@8

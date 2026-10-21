@@ -1,0 +1,42 @@
+# Redis 配置模板 - 用于单容器多进程部署
+# Redis configuration template for single-container multi-process deployment
+#
+# 注意：此文件为模板，__REDIS_SOCKET_PATH__ 会在容器启动时被替换
+# Note: This is a template, __REDIS_SOCKET_PATH__ will be replaced at container startup
+
+# 关闭 TCP 端口（仅使用 Unix socket）
+# Disable TCP port (Unix socket only)
+port 0
+
+# 启用 Unix domain socket（路径由环境变量 REDIS_SOCKET_PATH 控制）
+# Enable Unix domain socket (path controlled by REDIS_SOCKET_PATH env var)
+unixsocket __REDIS_SOCKET_PATH__
+unixsocketperm 770
+
+# 基本配置
+# Basic configuration
+bind 127.0.0.1
+protected-mode yes
+supervised no
+daemonize no
+
+# 日志配置
+# Logging configuration
+loglevel notice
+logfile ""
+
+# 内存管理
+# Memory management
+maxmemory 256mb
+maxmemory-policy allkeys-lru
+
+# 持久化配置（缓存场景可关闭）
+# Persistence configuration (can be disabled for cache scenario)
+save ""
+appendonly no
+
+# 性能优化
+# Performance optimization
+tcp-backlog 511
+timeout 0
+tcp-keepalive 300
