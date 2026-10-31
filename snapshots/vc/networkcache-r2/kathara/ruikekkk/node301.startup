@@ -1,0 +1,3 @@
+set -eu
+
+/shared/start-switch.sh node301 301 /shared/generated/node301.network.sh

@@ -1,0 +1,66 @@
+# Kua-inspired 16-device datacenter topology.
+#
+# Model:
+#   - Hosts 1-9 are storage/client-capable protocol nodes.
+#   - Rack forwarders 10-12 and core forwarders 13-16 also run rsync-node-dev.
+#   - Fabric nodes do not start with data or requests, but they forward and cache
+#     DATA on the return path, analogous to NDN router caches in Kua.
+#
+# Shape:
+#   Rack 1: N1, N2, N3 -> N10
+#   Rack 2: N4, N5, N6 -> N11
+#   Rack 3: N7, N8, N9 -> N12
+#   Core:   N13, N14, N15, N16
+#
+# Each rack forwarder connects to every core forwarder.
+# Edge count = 9 host-rack + 12 rack-core = 21.
+# Cross-rack host-to-provider shortest path = 4 hops.
+
+protocol:
+  max_hop_count: 8
+
+nodes:
+- id: 1
+  neighbors: [10]
+- id: 2
+  neighbors: [10]
+- id: 3
+  neighbors: [10]
+
+- id: 4
+  neighbors: [11]
+- id: 5
+  neighbors: [11]
+- id: 6
+  neighbors: [11]
+
+- id: 7
+  neighbors: [12]
+- id: 8
+  neighbors: [12]
+- id: 9
+  neighbors: [12]
+
+- id: 10
+  neighbors: [1, 2, 3, 13, 14, 15, 16]
+- id: 11
+  neighbors: [4, 5, 6, 13, 14, 15, 16]
+- id: 12
+  neighbors: [7, 8, 9, 13, 14, 15, 16]
+
+- id: 13
+  neighbors: [10, 11, 12]
+- id: 14
+  neighbors: [10, 11, 12]
+- id: 15
+  neighbors: [10, 11, 12]
+- id: 16
+  neighbors: [10, 11, 12]
+
+scenario:
+  ticks: 800
+  data:
+    - 9:redis_key_a=VALUE_OF_A
+  requests:
+    - 1:redis_key_a@40
+    - 2:redis_key_a@600

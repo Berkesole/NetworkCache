@@ -1,0 +1,10 @@
+nodes:
+- id: 1
+  host: 172.30.10.11
+  port: 41001
+  neighbors: [2]
+
+- id: 2
+  host: 172.30.10.99
+  port: 41002
+  neighbors: [1]

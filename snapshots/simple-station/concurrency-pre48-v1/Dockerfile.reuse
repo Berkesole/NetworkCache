@@ -1,0 +1,6 @@
+FROM rsync-router:concurrency-pilot-v4
+COPY src/network/tcp_network.cpp /app/src/network/tcp_network.cpp
+COPY src/network/tcp_network.hpp /app/src/network/tcp_network.hpp
+COPY tests/test_tcp_reuse.cpp /app/tests/test_tcp_reuse.cpp
+WORKDIR /app
+RUN cmake --build build -j8 && c++ -std=c++17 -O2 -pthread -Isrc tests/test_tcp_reuse.cpp src/network/tcp_network.cpp src/network/packet_codec.cpp src/packet.cpp src/event_trace.cpp -o build/test_tcp_reuse

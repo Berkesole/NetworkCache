@@ -1,0 +1,138 @@
+# Generated latency-v4 staged-fallback scenario.
+protocol:
+  max_hop_count: 12
+
+nodes:
+- id: 1
+  host: 10.90.0.1
+  port: 44001
+  neighbors: [2, 3, 4, 5, 29]
+- id: 2
+  host: 10.90.0.2
+  port: 44002
+  neighbors: [1]
+- id: 3
+  host: 10.90.0.3
+  port: 44003
+  neighbors: [1]
+- id: 4
+  host: 10.90.0.4
+  port: 44004
+  neighbors: [1]
+- id: 5
+  host: 10.90.0.5
+  port: 44005
+  neighbors: [1, 6, 7, 8, 9]
+- id: 6
+  host: 10.90.0.6
+  port: 44006
+  neighbors: [5]
+- id: 7
+  host: 10.90.0.7
+  port: 44007
+  neighbors: [5]
+- id: 8
+  host: 10.90.0.8
+  port: 44008
+  neighbors: [5]
+- id: 9
+  host: 10.90.0.9
+  port: 44009
+  neighbors: [5, 10, 11, 12, 13]
+- id: 10
+  host: 10.90.0.10
+  port: 44010
+  neighbors: [9]
+- id: 11
+  host: 10.90.0.11
+  port: 44011
+  neighbors: [9]
+- id: 12
+  host: 10.90.0.12
+  port: 44012
+  neighbors: [9]
+- id: 13
+  host: 10.90.0.13
+  port: 44013
+  neighbors: [9, 14, 15, 16, 17]
+- id: 14
+  host: 10.90.0.14
+  port: 44014
+  neighbors: [13]
+- id: 15
+  host: 10.90.0.15
+  port: 44015
+  neighbors: [13]
+- id: 16
+  host: 10.90.0.16
+  port: 44016
+  neighbors: [13]
+- id: 17
+  host: 10.90.0.17
+  port: 44017
+  neighbors: [13, 18, 19, 20, 21]
+- id: 18
+  host: 10.90.0.18
+  port: 44018
+  neighbors: [17]
+- id: 19
+  host: 10.90.0.19
+  port: 44019
+  neighbors: [17]
+- id: 20
+  host: 10.90.0.20
+  port: 44020
+  neighbors: [17]
+- id: 21
+  host: 10.90.0.21
+  port: 44021
+  neighbors: [17, 22, 23, 24, 25]
+- id: 22
+  host: 10.90.0.22
+  port: 44022
+  neighbors: [21]
+- id: 23
+  host: 10.90.0.23
+  port: 44023
+  neighbors: [21]
+- id: 24
+  host: 10.90.0.24
+  port: 44024
+  neighbors: [21]
+- id: 25
+  host: 10.90.0.25
+  port: 44025
+  neighbors: [21, 26, 27, 28, 29]
+- id: 26
+  host: 10.90.0.26
+  port: 44026
+  neighbors: [25]
+- id: 27
+  host: 10.90.0.27
+  port: 44027
+  neighbors: [25]
+- id: 28
+  host: 10.90.0.28
+  port: 44028
+  neighbors: [25]
+- id: 29
+  host: 10.90.0.29
+  port: 44029
+  neighbors: [1, 25, 30, 31, 32]
+- id: 30
+  host: 10.90.0.30
+  port: 44030
+  neighbors: [29]
+- id: 31
+  host: 10.90.0.31
+  port: 44031
+  neighbors: [29]
+- id: 32
+  host: 10.90.0.32
+  port: 44032
+  neighbors: [29]
+
+scenario:
+  ticks: 100000000
+  data:
+  requests:

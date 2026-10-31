@@ -1,0 +1,3 @@
+set -eu
+
+/shared/start-switch.sh node204 204 /shared/generated/node204.network.sh

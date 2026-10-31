@@ -1,0 +1,6 @@
+FROM rsync-router:concurrency-pilot-v8
+COPY app/rsync_node_main.cpp /app/app/rsync_node_main.cpp
+COPY app/probe_control.hpp /app/app/probe_control.hpp
+COPY tests/test_probe_control.cpp /app/tests/test_probe_control.cpp
+WORKDIR /app
+RUN cmake --build build -j8 && c++ -std=c++17 -O2 -Iapp tests/test_probe_control.cpp -o build/test_probe_control

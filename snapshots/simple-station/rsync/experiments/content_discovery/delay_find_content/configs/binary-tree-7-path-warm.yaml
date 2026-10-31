@@ -1,0 +1,43 @@
+# Path materialization warm scenario on a 7-node binary tree.
+# Node 4 asks first, causing the return path to cache redis_key_a.
+# Node 5 asks later for the same key and should be served closer if path caching materializes.
+protocol:
+  max_hop_count: 6
+
+nodes:
+  - id: 1
+    host: 172.31.40.11
+    port: 43401
+    neighbors: [2, 3]
+  - id: 2
+    host: 172.31.40.12
+    port: 43402
+    neighbors: [1, 4, 5]
+  - id: 3
+    host: 172.31.40.13
+    port: 43403
+    neighbors: [1, 6, 7]
+  - id: 4
+    host: 172.31.40.14
+    port: 43404
+    neighbors: [2]
+  - id: 5
+    host: 172.31.40.15
+    port: 43405
+    neighbors: [2]
+  - id: 6
+    host: 172.31.40.16
+    port: 43406
+    neighbors: [3]
+  - id: 7
+    host: 172.31.40.17
+    port: 43407
+    neighbors: [3]
+
+scenario:
+  ticks: 220
+  data:
+    - 7:redis_key_a=VALUE_OF_A
+  requests:
+    - 4:redis_key_a@5
+    - 5:redis_key_a@45

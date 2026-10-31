@@ -1,0 +1,6 @@
+# Minimal single-node topology for manual rsync-node-dev smoke.
+nodes:
+- id: 1
+  host: 127.0.0.1
+  port: 42101
+  neighbors: []

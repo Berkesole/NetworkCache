@@ -1,0 +1,26 @@
+# Bridge-oriented 4-node acceptance topology source.
+# phase5b2_bridge_4node_verify.sh renders the runtime host and port values
+# from this file so the mounted topology stays aligned with the chosen bridge
+# subnet while preserving the node/neighbor wiring here.
+# This is the first phase-5B-2 linear relay path:
+# node1 -> node2 -> node3 -> node4 -> node3 -> node2 -> node1.
+nodes:
+- id: 1
+  host: 10.50.0.1
+  port: 42001
+  neighbors: [2]
+
+- id: 2
+  host: 10.50.0.2
+  port: 42002
+  neighbors: [1, 3]
+
+- id: 3
+  host: 10.50.0.3
+  port: 42003
+  neighbors: [2, 4]
+
+- id: 4
+  host: 10.50.0.4
+  port: 42004
+  neighbors: [3]

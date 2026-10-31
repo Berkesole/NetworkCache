@@ -1,0 +1,80 @@
+# Generated Kua-DC v3 single-key workload for kua-dc-v3-16.
+# Protocol nodes are hosts only; Kathara renderer adds pure L3 leaf/spine switches.
+# Do not edit by hand; regenerate with scripts/generate_workloads_v3.py.
+# physical: hosts=16 leaves=4 spines=4
+protocol:
+  max_hop_count: 8
+
+nodes:
+  - id: 1
+    host: 172.31.150.11
+    port: 44501
+    neighbors: [2, 3, 4, 5, 13]
+  - id: 2
+    host: 172.31.150.12
+    port: 44502
+    neighbors: [1]
+  - id: 3
+    host: 172.31.150.13
+    port: 44503
+    neighbors: [1]
+  - id: 4
+    host: 172.31.150.14
+    port: 44504
+    neighbors: [1]
+  - id: 5
+    host: 172.31.150.15
+    port: 44505
+    neighbors: [1, 6, 7, 8, 9]
+  - id: 6
+    host: 172.31.150.16
+    port: 44506
+    neighbors: [5]
+  - id: 7
+    host: 172.31.150.17
+    port: 44507
+    neighbors: [5]
+  - id: 8
+    host: 172.31.150.18
+    port: 44508
+    neighbors: [5]
+  - id: 9
+    host: 172.31.150.19
+    port: 44509
+    neighbors: [5, 10, 11, 12, 13]
+  - id: 10
+    host: 172.31.150.20
+    port: 44510
+    neighbors: [9]
+  - id: 11
+    host: 172.31.150.21
+    port: 44511
+    neighbors: [9]
+  - id: 12
+    host: 172.31.150.22
+    port: 44512
+    neighbors: [9]
+  - id: 13
+    host: 172.31.150.23
+    port: 44513
+    neighbors: [1, 9, 14, 15, 16]
+  - id: 14
+    host: 172.31.150.24
+    port: 44514
+    neighbors: [13]
+  - id: 15
+    host: 172.31.150.25
+    port: 44515
+    neighbors: [13]
+  - id: 16
+    host: 172.31.150.26
+    port: 44516
+    neighbors: [13]
+
+scenario:
+  ticks: 1200
+  data:
+    - 16:redis_key_a=VALUE_OF_A
+  requests:
+    - 3:redis_key_a@220
+    - 4:redis_key_a@900

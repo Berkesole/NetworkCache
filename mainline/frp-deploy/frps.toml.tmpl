@@ -1,0 +1,35 @@
+# frps 服务端配置 —— 部署在 124.174.41.239 (volcengine-3)
+# 由 render.sh 渲染；TOKEN 与面板密码从本地 .frp_token / .frp_panel_password 注入
+
+bindAddr = "0.0.0.0"
+# 火山云安全组已放通 tcp 8000-9000，控制端口取 8000
+bindPort = 8000
+
+# 鉴权：客户端必须携带相同 token
+auth.method = "token"
+auth.token = "__TOKEN__"
+
+# 只允许客户端申请安全组已放通的 8000-9000 端口段
+allowPorts = [
+  { start = 8000, end = 9000 },
+]
+
+# 管理面板：只监听回环，需通过 SSH 隧道访问（ssh -L 7500:127.0.0.1:7500 volcengine-3）
+webServer.addr = "127.0.0.1"
+webServer.port = 7500
+webServer.user = "admin"
+webServer.password = "__PANEL_PASSWORD__"
+
+# 强制 TLS 加密控制连接（frpc 0.50+ 默认开启 TLS，兼容）
+transport.tls.force = true
+
+# 日志
+log.to = "/var/log/frps.log"
+log.level = "info"
+log.maxDays = 7
+
+# 连接超时（秒）
+userConnTimeout = 10
+
+# 服务端允许的客户端连接数上限（默认 5，够用；如需多台客户端可调大）
+maxPortsPerClient = 10

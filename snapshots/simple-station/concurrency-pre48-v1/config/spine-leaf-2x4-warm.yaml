@@ -1,0 +1,73 @@
+# 8-node spine-leaf overlay, 2 racks × (2 leaves + 2 reps)
+# 实验目的：测对称协议（v1 baseline，无 §3.6 rack-aware）在 DCN 拓扑下的行为
+#
+# 拓扑（仅 server 进入 protocol；spine/leaf switch 不可编程，不作为 node）：
+#
+#   Rack-1                              Rack-2
+#   ─────────────                       ─────────────
+#   N1 (leaf) ─┐                       ┌─ N7 (leaf)
+#              ├─ N3 (rep) ─── N5 (rep) ─┤
+#   N2 (leaf) ─┤   ╲           ╱   N6 (rep) ─ N7
+#              │    ╲         ╱        ├─ N8 (leaf)
+#              └─ N4 (rep) ─── N6 (rep) ─┘
+#
+# 边集：
+#   - 同 rack leaf-rep：每个 leaf 连两个 rep（4 条边/rack）
+#   - 同 rack rep-rep：不连（真实 DCN 中两个上联不直接通信，都过 ToR）
+#   - 同 rack leaf-leaf：不连
+#   - Cross-rack rep-rep：完全二部 K(2,2) → 4 条 ECMP-like lane
+#
+# 邻居数：leaf=2, rep=4
+# diameter (leaf-to-leaf cross-rack) = 4（leaf → rep → cross-rep → leaf）
+# TTL=8 给 detour buffer
+#
+# Phase 1 (tick=0): N1 (rack-1 leaf) 请求 key_a，持有方 N8 (rack-2 leaf)
+#   预期：cold flood 经两个 rack-1 reps → 4 条 cross-rack lanes → 两个 rack-2 reps → N8
+#   DATA 反向多路径，rack-1 / rack-2 内多个节点 cache 命中
+#
+# Phase 2 (tick=10): N2 (rack-1 另一个 leaf) 请求同 key_a
+#   关键观察点（baseline 缺陷）：
+#     - N2 的两个 rep 邻居 (N3, N4) 都已 cache 命中 → DATA 立即返回
+#     - 但 N3, N4 仍会 forward REQUEST 跨 rack（§2.2: BF 不知已满足）
+#     - 跨 rack 流量重复发生，验证 v1 缺乏 rack-aware 偏好的代价
+#     - 这是 §3.6 hierarchical deployment 的实证动机
+
+protocol:
+  max_hop_count: 8
+
+nodes:
+# Rack-1 leaves
+- id: 1
+  neighbors: [3, 4]
+
+- id: 2
+  neighbors: [3, 4]
+
+# Rack-1 reps（cross-rack 出口）
+- id: 3
+  neighbors: [1, 2, 5, 6]
+
+- id: 4
+  neighbors: [1, 2, 5, 6]
+
+# Rack-2 reps（cross-rack 入口）
+- id: 5
+  neighbors: [3, 4, 7, 8]
+
+- id: 6
+  neighbors: [3, 4, 7, 8]
+
+# Rack-2 leaves
+- id: 7
+  neighbors: [5, 6]
+
+- id: 8
+  neighbors: [5, 6]
+
+scenario:
+  ticks: 20
+  data:
+    - 8:redis_key_a=VALUE_OF_A
+  requests:
+    - 1:redis_key_a@0
+    - 2:redis_key_a@10

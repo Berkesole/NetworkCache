@@ -1,0 +1,57 @@
+[
+  {
+    "bytes": 8375,
+    "path": "experiments/content_discovery/delay_find_content/scripts/analyze_federation_v3_bf1024_h3_fallback_trace.py",
+    "sha256": "a22e9a22d88dc65c3be619d8c5e743697910c00d91f26fcb6b462480ad0304f2"
+  },
+  {
+    "bytes": 15154,
+    "path": "experiments/content_discovery/delay_find_content/scripts/federation_v2_controller.py",
+    "sha256": "f5ba956a2c2a197f7e512fd113fa2815f5ae22e69cbecb08e67e88c7faa9a40d"
+  },
+  {
+    "bytes": 78,
+    "path": "experiments/content_discovery/delay_find_content/scripts/federation_v2_inspect_network.sh",
+    "sha256": "e87e79295eb745cad0bd5a38a8b0557e0ee1c9d8a1d86d951807030a7b02a625"
+  },
+  {
+    "bytes": 2897,
+    "path": "experiments/content_discovery/delay_find_content/scripts/federation_v3_cache_probe.py",
+    "sha256": "3279ae1cd93678ee732f59d7589a3131eee4ef9bc9701c1a7a3beb3566cf3239"
+  },
+  {
+    "bytes": 9318,
+    "path": "experiments/content_discovery/delay_find_content/scripts/federation_v3_controller.py",
+    "sha256": "d6feccc798382c22d62580f5d043ba8a17974f86444001fe05c0441c5385f2bf"
+  },
+  {
+    "bytes": 587,
+    "path": "experiments/content_discovery/delay_find_content/scripts/latency_v3_clock_probe.py",
+    "sha256": "316f214065277c740a61f8e1b04c2df597c8a1ddc9a82fe5f0d7d99de63410d6"
+  },
+  {
+    "bytes": 10417,
+    "path": "experiments/content_discovery/delay_find_content/scripts/latency_v3_tcp_node.py",
+    "sha256": "435086d64a7804e62d3d882765a2f31769a1f6a01a15b14917357c0c02f7d385"
+  },
+  {
+    "bytes": 19182,
+    "path": "experiments/content_discovery/delay_find_content/scripts/run_federation_v3_bf1024_h3_fallback_once.sh",
+    "sha256": "195e1210d29995a54aad5550c850a2d90ebd58cdf47163c26f9314cb045c7977"
+  },
+  {
+    "bytes": 345,
+    "path": "scripts/kathara/down_ruikekkk_scenario.sh",
+    "sha256": "7bb30201285d7da17fe6ebc7e4e7a4d5ccd6b93a95fd2ce24c1119cadd34d0b8"
+  },
+  {
+    "bytes": 37063,
+    "path": "scripts/kathara/render_ruikekkk_scenario.sh",
+    "sha256": "3605e4c9b5b4ed3597f03f424709822b50561a9338a1ccef2a87c896cadac5ba"
+  },
+  {
+    "bytes": 2670,
+    "path": "scripts/kathara/run_ruikekkk_scenario.sh",
+    "sha256": "39a2acc7294818ffce196ab33b271617ce528bb190fd51c812811dd8b835981d"
+  }
+]

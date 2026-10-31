@@ -1,0 +1,1424 @@
+diff --git a/experiments/content_discovery/delay_find_content/scripts/analyze_latency_v4_bf1024_h3_c512.py b/experiments/content_discovery/delay_find_content/scripts/analyze_latency_v4_bf1024_h3_c512.py
+index 58a9d63..18bbf9c 100755
+--- a/experiments/content_discovery/delay_find_content/scripts/analyze_latency_v4_bf1024_h3_c512.py
++++ b/experiments/content_discovery/delay_find_content/scripts/analyze_latency_v4_bf1024_h3_c512.py
+@@ -14,9 +14,9 @@ from typing import Dict, Iterable, List, Mapping, Sequence, Tuple
+ 
+ EXP = Path(__file__).resolve().parent.parent
+ SUITE = "latency-v4-bf1024-h3-c512"
+-RESULTS = EXP / "results" / SUITE
++RESULTS = EXP / "results" / f"{SUITE}-formal-r2"
+ ANALYSIS = RESULTS / "analysis"
+-ASSETS = EXP / "paper_assets" / SUITE
++ASSETS = EXP / "paper_assets" / "networkcache-bf1024-h3-formal-r2" / "latency"
+ METRICS = ("end_to_end_latency_ns", "discovery_latency_proxy_ns",
+            "return_path_latency_proxy_ns", "source_fallback_triggered",
+            "preferred_logical_request_events", "fallback_logical_request_events")
+diff --git a/experiments/content_discovery/delay_find_content/scripts/federation_v2_controller.py b/experiments/content_discovery/delay_find_content/scripts/federation_v2_controller.py
+index 8715e33..bf51671 100755
+--- a/experiments/content_discovery/delay_find_content/scripts/federation_v2_controller.py
++++ b/experiments/content_discovery/delay_find_content/scripts/federation_v2_controller.py
+@@ -63,18 +63,36 @@ def write_csv(path: Path, columns: list[str], rows: list[dict[str, str]]) -> Non
+         writer.writerows({key: row.get(key, "") for key in columns} for row in rows)
+ 
+ 
++def acknowledgement_snapshot(paths: list[Path]) -> list[tuple[int, str]] | None:
++    """Return one coherent ACK snapshot, or None if an ACK is withdrawn.
++
++    Nodes deliberately remove their quiescence ACK when late protocol activity
++    arrives.  Existence checks followed by stat/read therefore race with that
++    withdrawal.  A disappearing ACK means "not stable yet", not a controller
++    failure.
++    """
++    snapshot: list[tuple[int, str]] = []
++    try:
++        for path in paths:
++            snapshot.append((path.stat().st_mtime_ns, path.read_text()))
++    except OSError:
++        return None
++    return snapshot
++
++
+ def quiesce(control: Path, index: int, nodes: int, timeout_ms: int, stable_ms: int) -> bool:
+     marker = control / "quiesce" / f"{index:06d}.marker"
+     atomic_write(marker, str(index) + "\n")
+     paths = [control / "quiesced" / f"{index:06d}-node{node}.ack" for node in range(1, nodes + 1)]
+     deadline = time.monotonic() + timeout_ms / 1000
+     while time.monotonic() < deadline:
+-        if not all(path.exists() for path in paths):
++        first = acknowledgement_snapshot(paths)
++        if first is None:
+             time.sleep(.01)
+             continue
+-        first = [(path.stat().st_mtime_ns, path.read_text()) for path in paths]
+         time.sleep(stable_ms / 1000)
+-        if first == [(path.stat().st_mtime_ns, path.read_text()) for path in paths]:
++        second = acknowledgement_snapshot(paths)
++        if second is not None and first == second:
+             marker.unlink(missing_ok=True)
+             for path in paths:
+                 path.unlink(missing_ok=True)
+diff --git a/experiments/content_discovery/delay_find_content/scripts/federation_v3_controller.py b/experiments/content_discovery/delay_find_content/scripts/federation_v3_controller.py
+index a9a21e7..58dda03 100644
+--- a/experiments/content_discovery/delay_find_content/scripts/federation_v3_controller.py
++++ b/experiments/content_discovery/delay_find_content/scripts/federation_v3_controller.py
+@@ -20,7 +20,8 @@ RESULT_COLUMNS = [
+     "requester_cluster", "owner_cluster", "original_owner_overlay_hops",
+     "overlay_edge_physical_signature", "expected_value_bytes", "expected_fnv1a64", "status",
+     "actual_value_bytes", "actual_fnv1a64", "request_start_mono_ns", "app_receive_mono_ns",
+-    "end_to_end_latency_ns", "packet_request_id", "via", "schedule_sha256",
++    "end_to_end_latency_ns", "discovery_latency_ns", "return_path_latency_ns",
++    "packet_request_id", "via", "schedule_sha256",
+     "quiescence_ack_count", "quiescence_stable_ms", "federation_ready_ns",
+     "activation_to_request_start_ns", "activation_to_remote_data_ns", "cached_route_node",
+ ]
+@@ -60,7 +61,12 @@ def snapshot(control: Path, root: Path, snapshot_id: str, phase: str, bin_index:
+ 
+ 
+ def should_snapshot(phase: str, bin_index: int) -> bool:
+-    return bin_index in (SNAPSHOT_PRE if phase == "pre" else SNAPSHOT_POST)
++    if phase == "pre":
++        return bin_index in SNAPSHOT_PRE
++    # Preserve the frozen 16-bin cadence and sample every four bins in extended
++    # convergence pilots. Existing workloads therefore produce identical
++    # snapshot sets, while a long pilot can observe continuing mechanism drift.
++    return bin_index in SNAPSHOT_POST or (bin_index > 16 and bin_index % 4 == 0)
+ 
+ 
+ def main() -> int:
+@@ -69,6 +75,8 @@ def main() -> int:
+     parser.add_argument("--isolation-probes", required=True, type=Path)
+     parser.add_argument("--control-dir", required=True, type=Path)
+     parser.add_argument("--output", required=True, type=Path)
++    parser.add_argument("--method", choices=("nc", "known-owner", "tcp-direct"), default="nc")
++    parser.add_argument("--skip-cache-probes", action="store_true")
+     parser.add_argument("--timeout-ms", type=int, default=8000)
+     parser.add_argument("--quiescence-timeout-ms", type=int, default=20000)
+     parser.add_argument("--stable-ms", type=int, default=500)
+@@ -85,23 +93,27 @@ def main() -> int:
+     results = []; failed = False; federation_ready = 0; activation_issued = 0; previous_end = 0
+     current_group: tuple[str, int] | None = None
+     try:
+-        snapshot(control, root, "ready", "ready", 0)
++        if not args.skip_cache_probes:
++            snapshot(control, root, "ready", "ready", 0)
+         for request in schedule:
+             group = (request["phase"], int(request["bin"]))
+-            if current_group and group != current_group and should_snapshot(*current_group):
++            if (not args.skip_cache_probes and current_group and group != current_group
++                    and should_snapshot(*current_group)):
+                 snapshot(control, root, f"{current_group[0]}-bin{current_group[1]:02d}", *current_group)
+             if request["phase"] == "post" and federation_ready == 0:
+-                snapshot(control, root, "pre-t0", "pre-t0", 0)
+-                v2.run_isolation_probes(probes, control, "nc", 8000,
++                if not args.skip_cache_probes:
++                    snapshot(control, root, "pre-t0", "pre-t0", 0)
++                v2.run_isolation_probes(probes, control, args.method, 8000,
+                                         args.quiescence_timeout_ms, args.stable_ms,
+                                         root / "isolation_results.csv")
+                 activation_issued, federation_ready = v2.activate(control, request["schedule_sha256"], 30)
+-                snapshot(control, root, "post-t0", "post-t0", 0)
++                if not args.skip_cache_probes:
++                    snapshot(control, root, "post-t0", "post-t0", 0)
+             current_group = group
+             index = int(request["request_index"]); requester = int(request["requester"])
+             completion_path = control / "completions" / f"{index}.tsv"
+             v2.atomic_write(control / "commands" / f"node{requester}" / f"{index:06d}.tsv",
+-                            "\t".join([str(index), "nc", request["key"], request["owner"],
++                            "\t".join([str(index), args.method, request["key"], request["owner"],
+                                       request["value_size_bytes"], request["expected_fnv1a64"],
+                                       request["schedule_sha256"]]) + "\n")
+             row = dict(request); row["expected_value_bytes"] = request["value_size_bytes"]
+@@ -123,9 +135,10 @@ def main() -> int:
+                 row["status"] = "quiescence_timeout"; failed = True; break
+             row["quiescence_ack_count"] = "64"; row["quiescence_stable_ms"] = str(args.stable_ms)
+             time.sleep(.1)
+-        if current_group and should_snapshot(*current_group):
++        if not args.skip_cache_probes and current_group and should_snapshot(*current_group):
+             snapshot(control, root, f"{current_group[0]}-bin{current_group[1]:02d}", *current_group)
+-        snapshot(control, root, "final", "final", 0)
++        if not args.skip_cache_probes:
++            snapshot(control, root, "final", "final", 0)
+     except Exception as exc:
+         failed = True; v2.atomic_write(control / "controller-error.txt", repr(exc) + "\n")
+     finally:
+diff --git a/experiments/content_discovery/delay_find_content/scripts/generate_federation_v3_pilot.py b/experiments/content_discovery/delay_find_content/scripts/generate_federation_v3_pilot.py
+index 306fb95..008917f 100644
+--- a/experiments/content_discovery/delay_find_content/scripts/generate_federation_v3_pilot.py
++++ b/experiments/content_discovery/delay_find_content/scripts/generate_federation_v3_pilot.py
+@@ -102,7 +102,9 @@ def deranged_requesters(owners: list[int], rng: random.Random) -> list[int]:
+     raise RuntimeError("unable to derange local requester slots")
+ 
+ 
+-def canonical(seed: int = SEED) -> list[dict]:
++def canonical(seed: int = SEED, post_bins: int = 16) -> list[dict]:
++    if post_bins < 1:
++        raise ValueError("post_bins must be positive")
+     endpoint_rng = random.Random(f"federation-v3-pilot:endpoints:{seed}")
+     key_rng = random.Random(f"federation-v3-pilot:key-quantiles:{seed}")
+     rows: list[dict] = []
+@@ -127,7 +129,7 @@ def canonical(seed: int = SEED) -> list[dict]:
+                 add("pre", bin_index, "local", f"{cluster}_local", cluster, cluster,
+                     requesters[slot], owners[slot])
+ 
+-    for bin_index in range(1, 17):
++    for bin_index in range(1, post_bins + 1):
+         remote = {}
+         for direction in ("A_to_B", "B_to_A"):
+             source = "A" if direction == "A_to_B" else "B"
+@@ -161,7 +163,7 @@ def canonical(seed: int = SEED) -> list[dict]:
+                     requesters[index], owners[index])
+                 local_index[cluster] += 1
+         assert local_index == {"A": 16, "B": 16}
+-    assert len(rows) == 3584
++    assert len(rows) == 1024 + post_bins * 160
+     return rows
+ 
+ 
+diff --git a/experiments/content_discovery/delay_find_content/scripts/latency_v3_tcp_node.py b/experiments/content_discovery/delay_find_content/scripts/latency_v3_tcp_node.py
+index 9320b2e..355e9c8 100755
+--- a/experiments/content_discovery/delay_find_content/scripts/latency_v3_tcp_node.py
++++ b/experiments/content_discovery/delay_find_content/scripts/latency_v3_tcp_node.py
+@@ -5,6 +5,7 @@ from __future__ import annotations
+ 
+ import argparse
+ import csv
++import json
+ import os
+ import socket
+ import struct
+@@ -12,7 +13,7 @@ import subprocess
+ import threading
+ import time
+ from pathlib import Path
+-from typing import Dict
++from typing import Callable, Dict
+ 
+ 
+ MASK64 = (1 << 64) - 1
+@@ -66,7 +67,8 @@ def atomic_write(path: Path, text: str) -> None:
+     temporary.replace(path)
+ 
+ 
+-def server_loop(listener: socket.socket, data: Dict[str, bytes], stop: threading.Event) -> None:
++def server_loop(listener: socket, data: Dict[str, bytes], stop: threading.Event,
++                trace: Callable[[str, str, str], None]) -> None:
+     listener.settimeout(0.2)
+     while not stop.is_set():
+         try:
+@@ -76,7 +78,7 @@ def server_loop(listener: socket.socket, data: Dict[str, bytes], stop: threading
+         with client:
+             client.settimeout(5)
+             index_size, key_size = struct.unpack("!II", recvall(client, 8))
+-            recvall(client, index_size)
++            request_index = recvall(client, index_size).decode()
+             key = recvall(client, key_size).decode()
+             value = data.get(key)
+             # The provider timestamp is carried in the response so TCP Direct
+@@ -84,10 +86,13 @@ def server_loop(listener: socket.socket, data: Dict[str, bytes], stop: threading
+             # the NetworkCache methods. Kathara containers share the host
+             # monotonic clock; the preflight/validator gates this assumption.
+             provider_hit_ns = time.monotonic_ns()
++            trace("provider_hit", request_index, key)
++            trace("data_send_start", request_index, key)
+             if value is None:
+                 client.sendall(struct.pack("!BQQ", 1, 0, provider_hit_ns))
+             else:
+                 client.sendall(struct.pack("!BQQ", 0, len(value), provider_hit_ns) + value)
++            trace("data_send_done", request_index, key)
+ 
+ 
+ def main() -> int:
+@@ -98,6 +103,7 @@ def main() -> int:
+     parser.add_argument("schedule_hash")
+     parser.add_argument("--host", default="0.0.0.0")
+     parser.add_argument("--port-base", type=int, default=47000)
++    parser.add_argument("--trace", type=Path)
+     args = parser.parse_args()
+ 
+     data = load_data(args.data_file)
+@@ -106,7 +112,21 @@ def main() -> int:
+     listener.bind((args.host, args.port_base + args.node_id))
+     listener.listen(128)
+     stop = threading.Event()
+-    server = threading.Thread(target=server_loop, args=(listener, data, stop), daemon=True)
++    trace_lock = threading.Lock()
++
++    def trace(event: str, request_index: str, key: str) -> None:
++        if args.trace is None:
++            return
++        row = {
++            "ts_mono_ns": time.monotonic_ns(), "node": args.node_id,
++            "event": event, "request_index": request_index, "key": key,
++            "transport": "tcp-direct",
++        }
++        args.trace.parent.mkdir(parents=True, exist_ok=True)
++        with trace_lock, args.trace.open("a", encoding="utf-8") as handle:
++            handle.write(json.dumps(row, sort_keys=True) + "\n")
++
++    server = threading.Thread(target=server_loop, args=(listener, data, stop, trace), daemon=True)
+     server.start()
+     atomic_write(args.control_dir / "ready" / f"node{args.node_id}.ready", f"ready\t{args.node_id}\n")
+ 
+@@ -125,20 +145,28 @@ def main() -> int:
+                 status, error = "rejected", "invalid activation command"
+                 peer = 33 if args.node_id == 1 else 1
+                 if len(fields) == 6 and int(fields[0]) == peer and fields[5] == args.schedule_hash:
+-                    completed = subprocess.run(["ip", "link", "set", "dev", "eth0", "up"],
+-                                               text=True, capture_output=True)
+-                    if completed.returncode == 0:
+-                        first, last = (33, 64) if args.node_id == 1 else (1, 32)
+-                        failures = []
+-                        for target in range(first, last + 1):
+-                            route = subprocess.run(["ip", "route", "replace", f"10.90.0.{target}/32",
+-                                                    "via", fields[4], "dev", "eth0",
+-                                                    "src", f"10.90.0.{args.node_id}"],
++                    activation_mode = os.environ.get(
++                        "RSYNC_FEDERATION_ACTIVATION_MODE", "direct-interface"
++                    )
++                    if activation_mode == "logical-only" and fields[4] == "external-border-route":
++                        status, error = "ok", ""
++                    elif activation_mode == "direct-interface":
++                        completed = subprocess.run(["ip", "link", "set", "dev", "eth0", "up"],
+                                                    text=True, capture_output=True)
+-                            if route.returncode: failures.append(route.stderr.strip())
+-                        status, error = ("ok", "") if not failures else ("rejected", failures[0])
++                        if completed.returncode == 0:
++                            first, last = (33, 64) if args.node_id == 1 else (1, 32)
++                            failures = []
++                            for target in range(first, last + 1):
++                                route = subprocess.run(["ip", "route", "replace", f"10.90.0.{target}/32",
++                                                        "via", fields[4], "dev", "eth0",
++                                                        "src", f"10.90.0.{args.node_id}"],
++                                                       text=True, capture_output=True)
++                                if route.returncode: failures.append(route.stderr.strip())
++                            status, error = ("ok", "") if not failures else ("rejected", failures[0])
++                        else:
++                            error = completed.stderr.strip() or "failed to enable federation interface"
+                     else:
+-                        error = completed.stderr.strip() or "failed to enable federation interface"
++                        error = f"unsupported activation mode: {activation_mode}"
+                 atomic_write(args.control_dir / "activated" / f"node{args.node_id}.tsv",
+                              f"{args.node_id}\t{peer}\t{status}\t{time.monotonic_ns()}\t{error}\n")
+             for path in sorted(command_dir.glob("*.tsv")):
+@@ -150,6 +178,7 @@ def main() -> int:
+                     continue
+                 index, _method, key, owner_text, expected_size, expected_hash, schedule_hash = fields[:7]
+                 start = time.monotonic_ns()
++                trace("request_start", index, key)
+                 status = "ok"
+                 value = b""
+                 provider_hit_ns = 0
+@@ -168,6 +197,8 @@ def main() -> int:
+                 actual_hash = fnv1a64(value)
+                 if status == "ok" and (len(value) != int(expected_size) or actual_hash != expected_hash):
+                     status = "integrity_mismatch"
++                if status == "ok":
++                    trace("app_receive", index, key)
+                 row = "\t".join([index, str(args.node_id), key, status, str(len(value)), actual_hash,
+                                   str(start), str(end), "0", "tcp_direct", schedule_hash,
+                                   str(provider_hit_ns)]) + "\n"
+diff --git a/experiments/content_discovery/delay_find_content/scripts/latency_v4_bf1024_h3_c512_suite/RUN_LATENCY_V4.md b/experiments/content_discovery/delay_find_content/scripts/latency_v4_bf1024_h3_c512_suite/RUN_LATENCY_V4.md
+index 855d22a..8cd3fa0 100644
+--- a/experiments/content_discovery/delay_find_content/scripts/latency_v4_bf1024_h3_c512_suite/RUN_LATENCY_V4.md
++++ b/experiments/content_discovery/delay_find_content/scripts/latency_v4_bf1024_h3_c512_suite/RUN_LATENCY_V4.md
+@@ -12,12 +12,19 @@ write to latency-v3 or federation result directories.
+ - Global closed loop with one request in flight and 100 ms think time.
+ - Redis is unlimited and uses `noeviction`.
+ 
+-Raw data are written below:
++Pilot history remains below:
+ 
+ ```text
+ experiments/content_discovery/delay_find_content/results/latency-v4-bf1024-h3-c512/
+ ```
+ 
++Corrected formal R2 attempts are written below and never select pilot or
++pre-R2 attempts:
++
++```text
++experiments/content_discovery/delay_find_content/results/latency-v4-bf1024-h3-c512-formal-r2/
++```
++
+ An existing raw run directory is never overwritten.
+ 
+ ## 1. Preflight and reduced smoke
+@@ -41,12 +48,13 @@ experiments/content_discovery/delay_find_content/scripts/latency_v4_bf1024_h3_c5
+ ```
+ 
+ It runs, in order, 16-host Zipf NC, 32-host Zipf NC and 32-host Uniform NC for
+-seed 001. When it finishes, stop and ask Codex to audit the pilot. Formal runners
+-remain blocked until the raw hashes and the Zipf stability gate have been
+-accepted into `pilot_acceptance.json`.
++seed 001. Formal runners remain blocked until request completeness, exact DATA
++integrity, single delivery, expiry, overlap and raw hashes have been accepted
++into `pilot_acceptance.json`.
+ 
+-If either Zipf pilot fails the predeclared stability gate at 2,048 requests,
+-regenerate the isolated workload at 4,096 requests and rerun all three pilots:
++The formal campaign fixes the IID observation horizon at 4,096 requests. The
++earlier 2,048-request pilots remain exploratory history. Generate and validate
++the paired 4,096-request pilots with:
+ 
+ ```bash
+ python3 experiments/content_discovery/delay_find_content/scripts/generate_latency_v4_bf1024_h3_c512.py \
+@@ -54,16 +62,18 @@ python3 experiments/content_discovery/delay_find_content/scripts/generate_latenc
+ experiments/content_discovery/delay_find_content/scripts/latency_v4_bf1024_h3_c512_suite/06_pilot.sh
+ ```
+ 
+-The 4,096-request pilot uses a different result subdirectory. Uniform
+-instability is reported but does not by itself block the formal matrix.
++The 4,096-request pilot uses a different result subdirectory. Late-window
++diagnostics are retained, but they are not a convergence gate and the report
++does not claim strict IID convergence.
+ 
+ ## 3. Formal matrix
+ 
+-After pilot acceptance, run all phases:
++After pilot acceptance and the multi-method R2 smoke, use the canonical paper
++campaign entry point:
+ 
+ ```bash
+ cd /root/zzh/rsync
+-experiments/content_discovery/delay_find_content/scripts/latency_v4_bf1024_h3_c512_suite/run_all.sh
++experiments/content_discovery/delay_find_content/scripts/paper_final_suite/run_all.sh
+ ```
+ 
+ Or run individual phases:
+@@ -81,8 +91,8 @@ resumes the matrix and skips qualified repetitions. Infrastructure image-build
+ failures are recorded separately and do not consume the four experimental
+ attempts per seed.
+ 
+-The 2,048-request formal matrix is expected to require roughly 4–7 days of
+-foreground cumulative runtime. The 4,096-request variant takes longer.
++The fixed 4,096-request formal matrix is expected to require roughly 7–10 days
++of foreground cumulative runtime on the current host.
+ 
+ ## Status and validation
+ 
+@@ -108,8 +118,8 @@ python3 experiments/reports/generate_latency_v4_bf1024_h3_c512_report.py
+ It writes only:
+ 
+ ```text
+-experiments/reports/latency-v4-bf1024-h3-c512/overall.pdf
+-experiments/reports/latency-v4-bf1024-h3-c512/overall.en.pdf
++experiments/reports/networkcache-bf1024-h3-formal-r2/overall.pdf
++experiments/reports/networkcache-bf1024-h3-formal-r2/overall.en.pdf
+ ```
+ 
+ The report is latency-only. It does not modify the existing latency-v3 or
+diff --git a/experiments/content_discovery/delay_find_content/scripts/run_federation_v3_bf1024_h3_fallback_once.sh b/experiments/content_discovery/delay_find_content/scripts/run_federation_v3_bf1024_h3_fallback_once.sh
+index 738f655..1969419 100755
+--- a/experiments/content_discovery/delay_find_content/scripts/run_federation_v3_bf1024_h3_fallback_once.sh
++++ b/experiments/content_discovery/delay_find_content/scripts/run_federation_v3_bf1024_h3_fallback_once.sh
+@@ -5,7 +5,7 @@ SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+ EXP_DIR=$(cd -- "${SCRIPT_DIR}/.." && pwd)
+ REPO_ROOT=$(cd -- "${EXP_DIR}/../../.." && pwd)
+ LAB_DIR="${REPO_ROOT}/kathara/ruikekkk"
+-SUITE=federation-v3-bf1024-h3-fallback-pilot
++SUITE=${FEDERATION_FALLBACK_SUITE:-federation-v3-bf1024-h3-fallback-pilot}
+ ROOT="${FEDERATION_V3_FALLBACK_WORKLOAD_ROOT:-${EXP_DIR}/workloads/${SUITE}}"
+ BLOOM_BITS=1024
+ BLOOM_HASH_COUNT=3
+@@ -16,9 +16,13 @@ FALLBACK_DELAY_MS=1500
+ QUERY_TIMEOUT_MS=7000
+ CONTROLLER_TIMEOUT_MS=8000
+ 
+-[[ $# -eq 2 ]] || { echo "Usage: $0 <scenario> <new-run-dir>" >&2; exit 2; }
++[[ $# -eq 2 || $# -eq 3 ]] || {
++  echo "Usage: $0 <scenario> [nc|known-owner|tcp-direct] <new-run-dir>" >&2
++  exit 2
++}
+ SCENARIO=$1
+-RUN_DIR=$2
++if [[ $# -eq 2 ]]; then METHOD=nc; RUN_DIR=$2; else METHOD=$2; RUN_DIR=$3; fi
++[[ "${METHOD}" =~ ^(nc|known-owner|tcp-direct)$ ]] || { echo "invalid method ${METHOD}" >&2; exit 2; }
+ [[ ! -e "${RUN_DIR}" ]] || { echo "run directory already exists: ${RUN_DIR}" >&2; exit 2; }
+ mkdir -p "${LAB_DIR}"
+ LOCK_DIR="${LAB_DIR}/.${SUITE}.lock"
+@@ -98,6 +102,20 @@ INPUT="${ROOT}/mapped/${SCENARIO}"
+ }
+ SCHEDULE_HASH=$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["schedule_sha256"])' "${INPUT}/metadata.json")
+ mkdir -p "${RUN_DIR}/logs" "${RUN_DIR}/traces"
++if [[ -n "${FEDERATION_CAMPAIGN_LOCK_FILE:-}" ]]; then
++  [[ -f "${FEDERATION_CAMPAIGN_LOCK_FILE}" ]] || {
++    echo "missing campaign lock ${FEDERATION_CAMPAIGN_LOCK_FILE}" >&2
++    exit 2
++  }
++  cp "${FEDERATION_CAMPAIGN_LOCK_FILE}" "${RUN_DIR}/campaign_lock.json"
++fi
++if [[ -n "${FEDERATION_ASSIGNMENT_FILE:-}" ]]; then
++  [[ -f "${FEDERATION_ASSIGNMENT_FILE}" ]] || {
++    echo "missing assignment ${FEDERATION_ASSIGNMENT_FILE}" >&2
++    exit 2
++  }
++  cp "${FEDERATION_ASSIGNMENT_FILE}" "${RUN_DIR}/assignment.json"
++fi
+ cp "${ROOT}/scenarios/${SCENARIO}.yaml" "${RUN_DIR}/scenario.yaml"
+ cp "${INPUT}/metadata.json" "${RUN_DIR}/schedule_metadata.json"
+ cp "${INPUT}/activation.json" "${RUN_DIR}/activation_spec.json"
+@@ -105,11 +123,36 @@ cp "${INPUT}/schedule.tsv" "${RUN_DIR}/schedule.tsv"
+ cp "${INPUT}/isolation_probes.tsv" "${RUN_DIR}/isolation_probes.tsv"
+ 
+ SHARED="${LAB_DIR}/shared/${SUITE}"
+-rm -rf "${SHARED}"
++reset_ephemeral_shared_path() {
++  local target=$1
++  # Containers write readiness and quiescence markers as root.  A retry is
++  # append-only in the results tree, but it must discard this suite-scoped
++  # scratch state or stale markers can contaminate the next attempt.
++  if ! rm -rf -- "${target}" 2>/dev/null; then
++    sudo -n rm -rf -- "${target}"
++  fi
++  [[ ! -e "${target}" ]] || {
++    echo "failed to reset ephemeral federation control path: ${target}" >&2
++    exit 4
++  }
++}
++reset_ephemeral_shared_path "${SHARED}"
+ mkdir -p "${SHARED}/data" "${SHARED}/control" "${LAB_DIR}/shared/logs" "${LAB_DIR}/shared/traces"
++if [[ "${METHOD}" == tcp-direct ]]; then
++  # Create the controller tree before helpers or permission checks. In
++  # particular, completions otherwise appears only after controller startup.
++  for name in commands completions ready quiesce quiesced stopped activation activated \
++      occupancy-markers occupancy protocol-state-markers protocol-state cancel cancelled; do
++    mkdir -p "${SHARED}/control/${name}"
++  done
++  for node in $(seq 1 64); do
++    mkdir -p "${SHARED}/control/commands/node${node}"
++  done
++fi
+ rm -f "${LAB_DIR}/shared/logs/"*.log "${LAB_DIR}/shared/traces/"*.jsonl
+ cp "${INPUT}/data/"node*.tsv "${SHARED}/data/"
+ cp "${SCRIPT_DIR}/latency_v3_clock_probe.py" "${SHARED}/clock_probe.py"
++cp "${SCRIPT_DIR}/latency_v3_tcp_node.py" "${SHARED}/tcp_node.py"
+ cp "${SCRIPT_DIR}/federation_v2_inspect_network.sh" "${SHARED}/inspect_network.sh"
+ cp "${SCRIPT_DIR}/federation_v3_cache_probe.py" "${SHARED}/cache_probe.py"
+ 
+@@ -118,7 +161,10 @@ STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+ # The values below are intentionally not recomputed after the long-running lab.
+ GIT_SNAPSHOT_AT=${STARTED_AT}
+ GIT_COMMIT=$(git -C "${REPO_ROOT}" rev-parse HEAD 2>/dev/null || echo unknown)
+-GIT_DIRTY=$([[ -n "$(git -C "${REPO_ROOT}" status --porcelain 2>/dev/null)" ]] && echo true || echo false)
++GIT_STATUS=$(git -C "${REPO_ROOT}" status --porcelain=v1 --untracked-files=all 2>/dev/null || true)
++GIT_DIRTY=$([[ -n "${GIT_STATUS}" ]] && echo true || echo false)
++GIT_DIRTY_STATE_SHA256=$(printf '%s' "${GIT_STATUS}" | sha256sum | awk '{print $1}')
++GIT_DIRTY_PATCH_SHA256=$(git -C "${REPO_ROOT}" diff --binary HEAD -- | sha256sum | awk '{print $1}')
+ 
+ KATHARA_LAUNCHED=true
+ set +e
+@@ -132,12 +178,15 @@ env DOCKERFILE_PATH="${REPO_ROOT}/Dockerfile.latency-v3" \
+   RSYNC_FALLBACK_DELAY_MS=${FALLBACK_DELAY_MS} RSYNC_QUERY_TIMEOUT_MS=${QUERY_TIMEOUT_MS} \
+   RSYNC_REDIS_TIMEOUT_MS=1000 RSYNC_REDIS_MAXMEMORY=0 \
+   RSYNC_REDIS_MAXMEMORY_POLICY=noeviction RSYNC_REDIS_REQUIRE_EMPTY=1 \
+-  RSYNC_LOOP_ITERATIONS=100000000 RSYNC_SKIP_APP=0 RSYNC_ORACLE_UNICAST=0 \
+-  RSYNC_FEDERATION_METHOD=nc RSYNC_EVENT_TRACE=1 RSYNC_EVENT_TRACE_FLUSH_EVERY=64 \
++  RSYNC_LOOP_ITERATIONS="${RSYNC_LOOP_ITERATIONS:-100000000}" \
++  RSYNC_SKIP_APP=$([[ "${METHOD}" == tcp-direct ]] && echo 1 || echo 0) \
++  RSYNC_ORACLE_UNICAST=$([[ "${METHOD}" == known-owner ]] && echo 1 || echo 0) \
++  RSYNC_FEDERATION_METHOD="${METHOD}" RSYNC_EVENT_TRACE=1 RSYNC_EVENT_TRACE_FLUSH_EVERY=64 \
+   RSYNC_EVENT_TRACE_RUN_ID="$(basename "${RUN_DIR}")" \
+   RSYNC_EXPERIMENT_CONTROL_DIR="/shared/${SUITE}/control" \
+   RSYNC_EXPERIMENT_DATA_DIR="/shared/${SUITE}/data" \
+   RSYNC_EXPERIMENT_SCHEDULE_HASH="${SCHEDULE_HASH}" \
++  RUNTIME_PROVENANCE_FILE="${RUN_DIR}/runtime_image_id.before_launch" \
+   "${REPO_ROOT}/scripts/kathara/run_ruikekkk_scenario.sh" "${SCENARIO}" \
+   >"${RUN_DIR}/driver.stdout.log" 2>"${RUN_DIR}/driver.stderr.log"
+ START_STATUS=$?
+@@ -153,7 +202,13 @@ if [[ ${START_STATUS} -eq 0 ]]; then
+     ready_logs=0
+     ready_switches=0
+     for node in $(seq 1 64); do
+-      grep -q 'started rsync-node-dev' "${LAB_DIR}/shared/logs/node${node}.startup.log" 2>/dev/null && ready_logs=$((ready_logs + 1))
++      if [[ "${METHOD}" == tcp-direct ]]; then
++        grep -q 'network configured without redis or rsync-node-dev' \
++          "${LAB_DIR}/shared/logs/node${node}.startup.log" 2>/dev/null && ready_logs=$((ready_logs + 1))
++      else
++        grep -q 'started rsync-node-dev' "${LAB_DIR}/shared/logs/node${node}.startup.log" \
++          2>/dev/null && ready_logs=$((ready_logs + 1))
++      fi
+     done
+     for node in $(seq 101 108) $(seq 201 204) $(seq 301 308) $(seq 401 404); do
+       grep -q 'configured forwarding switch' "${LAB_DIR}/shared/logs/node${node}.startup.log" 2>/dev/null && ready_switches=$((ready_switches + 1))
+@@ -166,32 +221,110 @@ if [[ ${START_STATUS} -eq 0 ]]; then
+     CONTROLLER_STATUS=98
+   else
+     sleep 2
+-    bloom_ready=0
+-    wire_ready=0
+-    for node in $(seq 1 64); do
+-      log="${LAB_DIR}/shared/logs/node${node}.log"
+-      grep -q "bloom configuration bits=${BLOOM_BITS} hashes=${BLOOM_HASH_COUNT}" "${log}" 2>/dev/null && bloom_ready=$((bloom_ready + 1))
+-      grep -q "wire configuration version=${WIRE_VERSION}" "${log}" 2>/dev/null && wire_ready=$((wire_ready + 1))
+-    done
++    bloom_ready=64
++    wire_ready=64
++    if [[ "${METHOD}" != tcp-direct ]]; then
++      bloom_ready=0
++      wire_ready=0
++      for node in $(seq 1 64); do
++        log="${LAB_DIR}/shared/logs/node${node}.log"
++        grep -q "bloom configuration bits=${BLOOM_BITS} hashes=${BLOOM_HASH_COUNT}" "${log}" \
++          2>/dev/null && bloom_ready=$((bloom_ready + 1))
++        grep -q "wire configuration version=${WIRE_VERSION}" "${log}" \
++          2>/dev/null && wire_ready=$((wire_ready + 1))
++      done
++    fi
+     if ((bloom_ready != 64 || wire_ready != 64)); then
+       echo "parameter gate: bloom=${bloom_ready}/64 wire=${wire_ready}/64" >>"${RUN_DIR}/driver.stderr.log"
+       CONTROLLER_STATUS=97
+     else
+       sleep 5
+       pids=()
+-      for node in $(seq 1 64); do
+-        timeout 10800 kathara exec -d "${LAB_DIR}" --wait "node${node}" python3 \
+-          "/shared/${SUITE}/cache_probe.py" "${node}" "/shared/${SUITE}/data/node${node}.tsv" \
+-          "/shared/${SUITE}/control" >"${RUN_DIR}/logs/node${node}.cache-probe.log" 2>&1 &
+-        pids+=("$!")
+-      done
++      if [[ "${METHOD}" == tcp-direct ]]; then
++        for node in $(seq 1 64); do
++          timeout 10800 kathara exec -d "${LAB_DIR}" --wait "node${node}" python3 \
++            "/shared/${SUITE}/tcp_node.py" "${node}" "/shared/${SUITE}/data/node${node}.tsv" \
++            "/shared/${SUITE}/control" "${SCHEDULE_HASH}" \
++            >"${RUN_DIR}/logs/node${node}.tcp-wrapper.log" 2>&1 &
++          pids+=("$!")
++        done
++      else
++        for node in $(seq 1 64); do
++          timeout 10800 kathara exec -d "${LAB_DIR}" --wait "node${node}" python3 \
++            "/shared/${SUITE}/cache_probe.py" "${node}" "/shared/${SUITE}/data/node${node}.tsv" \
++            "/shared/${SUITE}/control" >"${RUN_DIR}/logs/node${node}.cache-probe.log" 2>&1 &
++          pids+=("$!")
++        done
++      fi
+       set +e
+-      python3 "${SCRIPT_DIR}/federation_v3_controller.py" --schedule "${INPUT}/schedule.tsv" \
+-        --isolation-probes "${INPUT}/isolation_probes.tsv" \
+-        --control-dir "${SHARED}/control" --timeout-ms "${CONTROLLER_TIMEOUT_MS}" \
+-        --quiescence-timeout-ms 20000 --stable-ms 500 --output "${RUN_DIR}/request_results.csv" \
+-        >>"${RUN_DIR}/driver.stdout.log" 2>>"${RUN_DIR}/driver.stderr.log"
+-      CONTROLLER_STATUS=$?
++      helpers_ready=64
++      if [[ "${METHOD}" == tcp-direct ]]; then
++        helpers_ready=0
++        helper_dead=0
++        helper_deadline=$((SECONDS + ${TCP_HELPER_READY_TIMEOUT_SECONDS:-300}))
++        while ((SECONDS < helper_deadline)); do
++          helpers_ready=$(find "${SHARED}/control/ready" -maxdepth 1 \
++            -type f -name 'node*.ready' 2>/dev/null | wc -l)
++          ((helpers_ready == 64)) && break
++          helper_dead=0
++          for pid in "${pids[@]}"; do
++            kill -0 "${pid}" 2>/dev/null || helper_dead=$((helper_dead + 1))
++          done
++          ((helper_dead == 0)) || break
++          sleep 1
++        done
++        if ((helpers_ready != 64)); then
++          echo "tcp helper readiness gate: ready=${helpers_ready}/64 dead=${helper_dead}/64" \
++            >>"${RUN_DIR}/driver.stderr.log"
++          CONTROLLER_STATUS=96
++          for pid in "${pids[@]}"; do kill "${pid}" 2>/dev/null || true; done
++        elif ! sudo -n chmod -R a+rwX "${SHARED}/control"; then
++          echo "tcp control permission gate: chmod failed" \
++            >>"${RUN_DIR}/driver.stderr.log"
++          CONTROLLER_STATUS=95
++          helpers_ready=0
++          for pid in "${pids[@]}"; do kill "${pid}" 2>/dev/null || true; done
++        elif [[ ! -w "${SHARED}/control/commands/node1" \
++                  || ! -w "${SHARED}/control/commands/node64" \
++                  || ! -w "${SHARED}/control/completions" ]]; then
++          echo "tcp control permission gate: controller paths are not writable" \
++            >>"${RUN_DIR}/driver.stderr.log"
++          CONTROLLER_STATUS=95
++          helpers_ready=0
++          for pid in "${pids[@]}"; do kill "${pid}" 2>/dev/null || true; done
++        else
++          for node in $(seq 1 64); do
++            if [[ ! -w "${SHARED}/control/commands/node${node}" ]]; then
++              echo "tcp control permission gate: node${node} commands not writable" \
++                >>"${RUN_DIR}/driver.stderr.log"
++              CONTROLLER_STATUS=95
++              helpers_ready=0
++              for pid in "${pids[@]}"; do kill "${pid}" 2>/dev/null || true; done
++              break
++            fi
++          done
++        fi
++        if ((helpers_ready == 64)); then
++          echo "tcp control permission gate: writable" \
++            >>"${RUN_DIR}/driver.stdout.log"
++        fi
++      fi
++      if ((helpers_ready == 64)); then
++        echo "helper readiness gate: ready=${helpers_ready}/64" \
++          >>"${RUN_DIR}/driver.stdout.log"
++        controller_args=(--method "${METHOD}")
++        [[ "${METHOD}" == tcp-direct ]] && controller_args+=(--skip-cache-probes)
++        python3 "${SCRIPT_DIR}/federation_v3_controller.py" --schedule "${INPUT}/schedule.tsv" \
++          --isolation-probes "${INPUT}/isolation_probes.tsv" \
++          --control-dir "${SHARED}/control" --timeout-ms "${CONTROLLER_TIMEOUT_MS}" \
++          --quiescence-timeout-ms 20000 --stable-ms 500 --output "${RUN_DIR}/request_results.csv" \
++          "${controller_args[@]}" \
++          >>"${RUN_DIR}/driver.stdout.log" 2>>"${RUN_DIR}/driver.stderr.log"
++        CONTROLLER_STATUS=$?
++        if [[ -f "${SHARED}/control/controller-error.txt" ]]; then
++          cp "${SHARED}/control/controller-error.txt" "${RUN_DIR}/controller-error.txt"
++        fi
++      fi
+       for pid in "${pids[@]:-}"; do [[ -n "${pid}" ]] && wait "${pid}" || true; done
+       set -e
+       STATUS=$([[ ${CONTROLLER_STATUS} -eq 0 ]] && echo ok || echo incomplete)
+@@ -204,7 +337,7 @@ if [[ ${START_STATUS} -eq 0 ]]; then
+   find "${SHARED}/control/activated" -maxdepth 1 -name '*.tsv' -exec cp {} "${RUN_DIR}/activation_acks/" \; 2>/dev/null || true
+   [[ ! -d "${LAB_DIR}/shared/generated" ]] || cp -a "${LAB_DIR}/shared/generated" "${RUN_DIR}/generated_network"
+ 
+-  if [[ "${STATUS}" != driver_failed ]]; then
++  if [[ "${STATUS}" != driver_failed && "${METHOD}" != tcp-direct ]]; then
+     python3 "${SCRIPT_DIR}/analyze_federation_v3_bf1024_h3_fallback_trace.py" \
+       --results "${RUN_DIR}/request_results.csv" --traces "${RUN_DIR}/traces" \
+       --request-frame-bytes "${REQUEST_TCP_FRAME_BYTES}" --output "${RUN_DIR}/trace_breakdown.csv" || STATUS=analysis_failed
+@@ -212,7 +345,7 @@ if [[ ${START_STATUS} -eq 0 ]]; then
+   cp "${RUN_DIR}/activation.json" "${RUN_DIR}/activation_runtime.json" 2>/dev/null || true
+ 
+   if [[ "${STATUS}" != driver_failed ]]; then
+-    rm -rf "${SHARED}/clock-probe"
++    reset_ephemeral_shared_path "${SHARED}/clock-probe"
+     mkdir -p "${SHARED}/clock-probe"
+     clock_pids=()
+     for node in $(seq 1 64); do
+@@ -240,19 +373,27 @@ if [[ ${START_STATUS} -eq 0 ]]; then
+ fi
+ 
+ FINISHED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
++if [[ -f "${RUN_DIR}/runtime_image_id.before_launch" ]]; then
++  RUNTIME_IMAGE_ID=$(tr -d '\r\n' <"${RUN_DIR}/runtime_image_id.before_launch")
++else
++  RUNTIME_IMAGE_ID=unavailable
++fi
+ REQUIRED_GIT_ANCESTOR=${FEDERATION_FALLBACK_REQUIRED_GIT_ANCESTOR:-}
+ DATASET_LABEL=${FEDERATION_FALLBACK_DATASET_LABEL:-pre-fix-diagnostic}
+ python3 - "${RUN_DIR}/metadata.json" "${SCENARIO}" "${STATUS}" "${CONTROLLER_STATUS}" \
+   "${STARTED_AT}" "${FINISHED_AT}" "${SCHEDULE_HASH}" "${GIT_COMMIT}" "${GIT_DIRTY}" \
+-  "${GIT_SNAPSHOT_AT}" "${REQUIRED_GIT_ANCESTOR}" "${DATASET_LABEL}" <<'PY'
++  "${GIT_SNAPSHOT_AT}" "${REQUIRED_GIT_ANCESTOR}" "${DATASET_LABEL}" "${METHOD}" \
++  "${GIT_DIRTY_STATE_SHA256}" "${GIT_DIRTY_PATCH_SHA256}" "${RUNTIME_IMAGE_ID}" "${SUITE}" <<'PY'
+ import json
+ import sys
+ 
+ (path, scenario, status, controller_status, started, finished, schedule_hash,
+- commit, dirty, git_snapshot_at, required_git_ancestor, dataset_label) = sys.argv[1:]
++ commit, dirty, git_snapshot_at, required_git_ancestor, dataset_label, method,
++ dirty_state_sha256, dirty_patch_sha256, runtime_image_id, suite) = sys.argv[1:]
+ metadata = {
++    "suite": suite,
+     "scenario": scenario,
+-    "method": "nc",
++    "method": method,
+     "status": status,
+     "controller_status": int(controller_status),
+     "started_at": started,
+@@ -262,7 +403,7 @@ metadata = {
+     "fallback_delay_ms": 1500,
+     "query_table_timeout_ms": 7000,
+     "controller_timeout_ms": 8000,
+-    "cache_backend": "redis",
++    "cache_backend": "none" if method == "tcp-direct" else "redis",
+     "redis_maxmemory": 0,
+     "redis_maxmemory_policy": "noeviction",
+     "host_count": 64,
+@@ -281,10 +422,14 @@ metadata = {
+     "schedule_sha256": schedule_hash,
+     "git_commit": commit,
+     "git_dirty": dirty == "true",
++    "git_dirty_state_sha256": dirty_state_sha256,
++    "git_dirty_patch_sha256": dirty_patch_sha256,
+     "git_snapshot_at": git_snapshot_at,
+     "git_snapshot_phase": "before_kathara_launch",
+     "required_git_ancestor": required_git_ancestor,
+     "dataset_label": dataset_label,
++    "runtime_image_id": runtime_image_id,
++    "runtime_image_snapshot_phase": "after_build_before_kathara_launch",
+ }
+ with open(path, "w", encoding="utf-8") as handle:
+     json.dump(metadata, handle, indent=2, sort_keys=True)
+diff --git a/experiments/content_discovery/delay_find_content/scripts/run_latency_v4_bf1024_h3_c512_suite.py b/experiments/content_discovery/delay_find_content/scripts/run_latency_v4_bf1024_h3_c512_suite.py
+index f3c70b5..b52144c 100755
+--- a/experiments/content_discovery/delay_find_content/scripts/run_latency_v4_bf1024_h3_c512_suite.py
++++ b/experiments/content_discovery/delay_find_content/scripts/run_latency_v4_bf1024_h3_c512_suite.py
+@@ -18,13 +18,15 @@ from pathlib import Path
+ from typing import Dict, List, Sequence, Tuple
+ 
+ import generate_latency_v4_bf1024_h3_c512 as gen
++import formal_campaign
+ 
+ 
+ SCRIPT_DIR = Path(__file__).resolve().parent
+ EXP_DIR = SCRIPT_DIR.parent
+ REPO_ROOT = EXP_DIR.parents[2]
+ SUITE = "latency-v4-bf1024-h3-c512"
+-RESULTS_ROOT = EXP_DIR / "results" / SUITE
++PILOT_RESULTS_ROOT = EXP_DIR / "results" / SUITE
++RESULTS_ROOT = EXP_DIR / "results" / f"{SUITE}-formal-r2"
+ WORKLOAD_ROOT = EXP_DIR / "workloads" / SUITE
+ TARGET_PER_SEED = 2
+ MAX_ATTEMPTS_PER_SEED = 4
+@@ -204,6 +206,16 @@ def validate_run(path: Path, config: Config) -> Tuple[bool, str]:
+         return False, "driver_or_protocol_configuration"
+     if metadata.get("staged_fallback") is not True:
+         return False, "fallback_disabled"
++    if "attempts" in path.parts:
++        try:
++            attached = json.loads((path / "campaign_lock.json").read_text())
++            current_lock = json.loads(formal_campaign.LOCK.read_text())
++        except Exception:
++            return False, "campaign_lock_missing"
++        if attached.get("campaign_fingerprint") != current_lock.get("campaign_fingerprint"):
++            return False, "campaign_lock_mismatch"
++        if metadata.get("runtime_image_id") != current_lock.get("runtime_image_id"):
++            return False, "runtime_image_mismatch"
+     if not metadata.get("git_dirty_patch_sha256") or metadata.get("runtime_image_id") in ("", "unavailable"):
+         return False, "provenance_missing"
+     if metadata.get("runtime_image_snapshot_phase") != "after_build_before_kathara_launch":
+@@ -286,13 +298,17 @@ def next_attempt(config: Config, seed: int) -> Path:
+ 
+ 
+ def acceptance_marker_valid() -> Tuple[bool, str]:
+-    marker_path = RESULTS_ROOT / "pilot_acceptance.json"
++    marker_path = PILOT_RESULTS_ROOT / "pilot_acceptance.json"
+     try:
+         marker = json.loads(marker_path.read_text())
+     except Exception:
+         return False, "missing pilot_acceptance.json"
+     if marker.get("suite") != SUITE or marker.get("accepted") is not True:
+         return False, "invalid pilot acceptance"
++    if marker.get("decision") != "fixed_observation_horizon_no_convergence_claim":
++        return False, "pilot acceptance has another interpretation"
++    if marker.get("iid_requests") != 4096:
++        return False, "formal campaign requires 4096 IID requests"
+     if marker.get("iid_requests") != iid_request_count():
+         return False, "pilot acceptance uses another IID length"
+     if marker.get("generator_sha256") != sha256(Path(gen.__file__)):
+@@ -320,16 +336,21 @@ def run_one(config: Config, seed: int, output: Path, skip_build: bool) -> bool:
+     command = [str(SCRIPT_DIR / "run_latency_v4_bf1024_h3_c512_once.sh"),
+                config.scenario(seed), config.method, str(output)]
+     subprocess.run(command, cwd=REPO_ROOT, env=env, check=False)
++    if output.exists() and "attempts" in output.parts:
++        formal_campaign.attach(output)
+     return output.joinpath("metadata.json").exists() and not is_build_failure(output)
+ 
+ 
+ def run_phase(phase: str) -> int:
++    formal_campaign.verify()
+     valid, reason = acceptance_marker_valid()
+     if not valid:
+         print(f"PILOT_GATE: {reason}", file=sys.stderr)
+         return 4
+     configs = CONFIGS if phase == "all" else [config for config in CONFIGS if config.phase == phase]
+-    built = False
++    # The formal campaign lock freezes the smoke-built runtime image.  Formal
++    # attempts must reuse it instead of rebuilding from a later worktree.
++    built = True
+     for slot in range(1, MAX_ATTEMPTS_PER_SEED + 1):
+         for seed in gen.SEEDS:
+             block = list(configs)
+@@ -350,7 +371,7 @@ def run_phase(phase: str) -> int:
+ 
+ 
+ def pilot_root() -> Path:
+-    return RESULTS_ROOT / f"pilots-iid{iid_request_count()}"
++    return PILOT_RESULTS_ROOT / f"pilots-iid{iid_request_count()}"
+ 
+ 
+ def pilot_run_dirs(config: Config) -> List[Path]:
+@@ -387,21 +408,34 @@ def run_pilots() -> int:
+     return 0
+ 
+ 
+-def run_smoke() -> int:
+-    config = Config("smoke", "controlled", 16, "nc", 65536)
++def run_smoke(method: str, topology: int) -> int:
++    config = Config("smoke", "controlled", topology, method, 65536)
+     root = RESULTS_ROOT / "smoke" / config.slug / "seed001"
+     existing = sorted(path for path in root.glob("run[0-9][0-9][0-9]") if path.is_dir()) if root.exists() else []
++    try:
++        current_image = formal_campaign.runtime_image_id()
++    except RuntimeError:
++        current_image = None
+     for output in existing:
+         valid, reason = validate_run(output, config)
+-        if valid:
++        try:
++            metadata = json.loads((output / "metadata.json").read_text())
++        except Exception:
++            metadata = {}
++        if valid and current_image is not None and metadata.get("runtime_image_id") == current_image:
+             print(f"smoke READY ({reason}): {output}")
+             return 0
+     output = root / f"run{len(existing) + 1:03d}"
+-    reusable_image = any(
++    reusable_image = current_image is not None and (os.environ.get("RSYNC_SMOKE_REUSE_IMAGE") == "1" or any(
+         path.joinpath("runtime_image_id.before_launch").is_file() for path in existing
+-    )
++    ))
+     run_one(config, 1, output, reusable_image)
+     valid, reason = validate_run(output, config)
++    if valid:
++        metadata = json.loads((output / "metadata.json").read_text())
++        current_image = formal_campaign.runtime_image_id()
++        if metadata.get("runtime_image_id") != current_image:
++            valid, reason = False, "runtime_image_mismatch"
+     print(f"smoke {'READY' if valid else 'REJECTED'} ({reason}): {output}")
+     return 0 if valid else 2
+ 
+@@ -452,8 +486,8 @@ def write_pilot_assessment() -> List[Dict[str, object]]:
+ 
+ def approve_pilots() -> int:
+     assessment = write_pilot_assessment()
+-    if not all(row["stable"] for row in assessment if row["zipf_gate"]):
+-        print("Zipf pilot stability gate failed; do not start the formal matrix", file=sys.stderr)
++    if iid_request_count() != 4096:
++        print("formal campaign fixes the IID observation horizon at 4096 requests", file=sys.stderr)
+         return 2
+     runs = []
+     for config in PILOTS:
+@@ -469,14 +503,16 @@ def approve_pilots() -> int:
+         runs.append({"config": config.slug, "run_dir": str(path.resolve()),
+                      "hashes": {name: sha256(path / name) for name in names}})
+     marker = {"suite": SUITE, "accepted": True, "iid_requests": iid_request_count(),
++              "decision": "fixed_observation_horizon_no_convergence_claim",
++              "convergence_claim": False,
+               "generator_sha256": sha256(Path(gen.__file__)),
+               "generator_commit": generator_commit(),
+               "workload_fingerprint": workload_fingerprint(), "runs": runs,
+               "assessment_sha256": sha256(pilot_root() / "pilot_assessment.json")}
+-    RESULTS_ROOT.mkdir(parents=True, exist_ok=True)
+-    temporary = RESULTS_ROOT / ".pilot_acceptance.json.tmp"
++    PILOT_RESULTS_ROOT.mkdir(parents=True, exist_ok=True)
++    temporary = PILOT_RESULTS_ROOT / ".pilot_acceptance.json.tmp"
+     temporary.write_text(json.dumps(marker, indent=2, sort_keys=True) + "\n")
+-    temporary.replace(RESULTS_ROOT / "pilot_acceptance.json")
++    temporary.replace(PILOT_RESULTS_ROOT / "pilot_acceptance.json")
+     print("pilot acceptance marker created")
+     return 0
+ 
+@@ -527,7 +563,8 @@ def write_status() -> None:
+ def print_status() -> int:
+     write_status()
+     marker, reason = acceptance_marker_valid()
+-    print(f"pilot_gate={'READY' if marker else 'BLOCKED'} ({reason}) iid_requests={iid_request_count()}")
++    print(f"campaign=r2 pilot_gate={'READY' if marker else 'BLOCKED'} ({reason}) "
++          f"iid_requests={iid_request_count()}")
+     for row in status_rows():
+         print(f"{row['status']:10} {row['config']:48} selected={row['selected_runs']:>3}/20 attempts={row['attempts']}")
+     return 0
+@@ -557,7 +594,10 @@ def main() -> int:
+     run = sub.add_parser("run")
+     run.add_argument("--phase", choices=["all", "controlled", "iid-zipf", "iid-uniform", "data-size"], default="all")
+     sub.add_parser("pilot")
+-    sub.add_parser("smoke")
++    smoke = sub.add_parser("smoke")
++    smoke.add_argument("--method", choices=["nc", "known-owner", "tcp-direct"],
++                       default="nc")
++    smoke.add_argument("--topology", type=int, choices=[16, 32], default=16)
+     sub.add_parser("approve-pilot")
+     sub.add_parser("status")
+     sub.add_parser("validate")
+@@ -568,7 +608,7 @@ def main() -> int:
+     if args.command == "pilot":
+         return run_pilots()
+     if args.command == "smoke":
+-        return run_smoke()
++        return run_smoke(args.method, args.topology)
+     if args.command == "approve-pilot":
+         return approve_pilots()
+     if args.command == "status":
+diff --git a/scripts/kathara/render_ruikekkk_scenario.sh b/scripts/kathara/render_ruikekkk_scenario.sh
+index 61cb841..c50bafc 100755
+--- a/scripts/kathara/render_ruikekkk_scenario.sh
++++ b/scripts/kathara/render_ruikekkk_scenario.sh
+@@ -42,6 +42,9 @@ RSYNC_REDIS_MAXMEMORY_POLICY_VALUE="${RSYNC_REDIS_MAXMEMORY_POLICY:-}"
+ RSYNC_REDIS_REQUIRE_EMPTY_VALUE="${RSYNC_REDIS_REQUIRE_EMPTY:-0}"
+ RSYNC_QUERY_TIMEOUT_MS_VALUE="${RSYNC_QUERY_TIMEOUT_MS:-500}"
+ RSYNC_FEDERATION_METHOD_VALUE="${RSYNC_FEDERATION_METHOD:-}"
++FEDERATION_PHYSICAL_MODE="${KATHARA_FEDERATION_PHYSICAL_MODE:-direct-boundary}"
++FEDERATION_SHARD="${KATHARA_FEDERATION_SHARD:-}"
++RSYNC_FEDERATION_ACTIVATION_MODE_VALUE="${RSYNC_FEDERATION_ACTIVATION_MODE:-direct-interface}"
+ 
+ declare -a NODE_IDS=()
+ declare -a SORTED_NODE_IDS=()
+@@ -58,9 +61,13 @@ declare -A LINK_NAME=()
+ declare -A LINK_LOCAL_IP=()
+ declare -A LINK_PEER_IP=()
+ declare -A NEXT_HOP=()
++declare -A BORDER_NEXT_HOP=()
+ declare -A HOST_SERVICE_NEIGHBOR=()
+ LEAF_COUNT=0
+ SPINE_COUNT=0
++LOCAL_BORDER_ID=0
++LOCAL_DOMAIN_LOW=0
++LOCAL_DOMAIN_HIGH=0
+ PROTOCOL_MAX_HOP_COUNT=8
+ 
+ fail() {
+@@ -132,7 +139,12 @@ is_federation_scenario() {
+      "${scenario_name}" == kua-dc-v3-federation-v2-* ||
+      "${scenario_name}" == kua-dc-v3-federation-v3-pilot-* ||
+      "${scenario_name}" == kua-dc-v3-federation-v3-bf*-h3-fallback-pilot-* ||
+-     "${scenario_name}" == kua-dc-v3-federation-v3-bf*-h3-pilot-* ]]
++     "${scenario_name}" == kua-dc-v3-federation-v3-bf*-h3-pilot-* ||
++     "${scenario_name}" == kua-dc-v5-cross-host-federation-v1-* ]]
++}
++
++is_cross_host_federation() {
++  [[ "${FEDERATION_PHYSICAL_MODE}" == "bordered-cross-host" ]]
+ }
+ 
+ loopback_ip() {
+@@ -306,6 +318,71 @@ build_federation_physical_topology() {
+   append_physical_neighbor 33 1
+ }
+ 
++build_cross_host_federation_physical_topology() {
++  local host_count="${#SORTED_NODE_IDS[@]}"
++  local host_id="" rack_index=0 leaf_id="" spine_id=""
++  ((host_count == 64)) || fail "cross-host federation requires exactly 64 protocol hosts"
++  [[ "${FEDERATION_SHARD}" == "a" || "${FEDERATION_SHARD}" == "b" ]] || \
++    fail "KATHARA_FEDERATION_SHARD must be a or b for bordered-cross-host mode"
++
++  LEAF_COUNT=8
++  SPINE_COUNT=4
++  if [[ "${FEDERATION_SHARD}" == "a" ]]; then
++    LOCAL_DOMAIN_LOW=1
++    LOCAL_DOMAIN_HIGH=32
++    LOCAL_BORDER_ID=250
++    for rack_index in $(seq 1 8); do add_device "$((100 + rack_index))" "switch"; done
++    for spine_id in $(seq 201 204); do add_device "${spine_id}" "switch"; done
++  else
++    LOCAL_DOMAIN_LOW=33
++    LOCAL_DOMAIN_HIGH=64
++    LOCAL_BORDER_ID=450
++    for rack_index in $(seq 1 8); do add_device "$((300 + rack_index))" "switch"; done
++    for spine_id in $(seq 401 404); do add_device "${spine_id}" "switch"; done
++  fi
++  add_device "${LOCAL_BORDER_ID}" "switch"
++
++  for host_id in "${SORTED_NODE_IDS[@]}"; do
++    ((host_id >= LOCAL_DOMAIN_LOW && host_id <= LOCAL_DOMAIN_HIGH)) || continue
++    add_device "${host_id}" "host"
++    if [[ "${FEDERATION_SHARD}" == "a" ]]; then
++      rack_index=$(((host_id - 1) / 4 + 1)); leaf_id=$((100 + rack_index))
++    else
++      rack_index=$(((host_id - 33) / 4 + 1)); leaf_id=$((300 + rack_index))
++    fi
++    HOST_SERVICE_NEIGHBOR["${host_id}"]="${leaf_id}"
++    append_physical_neighbor "${host_id}" "${leaf_id}"
++    append_physical_neighbor "${leaf_id}" "${host_id}"
++  done
++
++  for rack_index in $(seq 1 8); do
++    if [[ "${FEDERATION_SHARD}" == "a" ]]; then
++      leaf_id=$((100 + rack_index))
++      for spine_id in $(seq 201 204); do
++        append_physical_neighbor "${leaf_id}" "${spine_id}"
++        append_physical_neighbor "${spine_id}" "${leaf_id}"
++      done
++    else
++      leaf_id=$((300 + rack_index))
++      for spine_id in $(seq 401 404); do
++        append_physical_neighbor "${leaf_id}" "${spine_id}"
++        append_physical_neighbor "${spine_id}" "${leaf_id}"
++      done
++    fi
++  done
++  if [[ "${FEDERATION_SHARD}" == "a" ]]; then
++    for spine_id in $(seq 201 204); do
++      append_physical_neighbor "${spine_id}" "${LOCAL_BORDER_ID}"
++      append_physical_neighbor "${LOCAL_BORDER_ID}" "${spine_id}"
++    done
++  else
++    for spine_id in $(seq 401 404); do
++      append_physical_neighbor "${spine_id}" "${LOCAL_BORDER_ID}"
++      append_physical_neighbor "${LOCAL_BORDER_ID}" "${spine_id}"
++    done
++  fi
++}
++
+ build_physical_edges() {
+   local device_id=""
+   local neighbor=""
+@@ -403,6 +480,34 @@ bfs_next_hop() {
+   printf '%s\n' "${current}"
+ }
+ 
++physical_next_hop() {
++  local source="$1"
++  local target="$2"
++  local current="" neighbor="" q_index=0
++  local -a queue=("${source}")
++  local -A seen=() parent=()
++  seen["${source}"]=1
++  while ((q_index < ${#queue[@]})); do
++    current="${queue[${q_index}]}"
++    q_index=$((q_index + 1))
++    while IFS= read -r neighbor; do
++      [[ -n "${neighbor}" ]] || continue
++      if [[ -z "${seen[${neighbor}]:-}" ]]; then
++        seen["${neighbor}"]=1
++        parent["${neighbor}"]="${current}"
++        queue+=("${neighbor}")
++      fi
++    done < <(sorted_physical_neighbors "${current}")
++  done
++  [[ -n "${seen[${target}]:-}" ]] || fail "physical graph is disconnected between ${source} and ${target}"
++  current="${target}"
++  while [[ "${parent[${current}]:-}" != "${source}" ]]; do
++    current="${parent[${current}]:-}"
++    [[ -n "${current}" ]] || fail "unable to resolve physical next hop from ${source} to ${target}"
++  done
++  printf '%s\n' "${current}"
++}
++
+ compute_next_hops() {
+   local source=""
+   local target=""
+@@ -430,8 +535,23 @@ compute_next_hops() {
+       done < <(sorted_physical_neighbors "${current}")
+     done
+ 
++    if is_cross_host_federation && [[ "${source}" != "${LOCAL_BORDER_ID}" ]]; then
++      [[ -n "${seen[${LOCAL_BORDER_ID}]:-}" ]] || \
++        fail "graph is disconnected between node ${source} and border ${LOCAL_BORDER_ID}"
++      current="${LOCAL_BORDER_ID}"
++      while [[ "${parent[${current}]:-}" != "${source}" ]]; do
++        current="${parent[${current}]:-}"
++        [[ -n "${current}" ]] || \
++          fail "unable to resolve next hop from node ${source} to border ${LOCAL_BORDER_ID}"
++      done
++      BORDER_NEXT_HOP["${source}"]="${current}"
++    fi
++
+     for target in "${SORTED_NODE_IDS[@]}"; do
+       [[ "${target}" != "${source}" ]] || continue
++      if is_cross_host_federation && [[ -z "${DEVICE_SEEN[${target}]:-}" ]]; then
++        continue
++      fi
+       [[ -n "${seen[${target}]:-}" ]] || fail "graph is disconnected between node ${source} and node ${target}"
+ 
+       current="${target}"
+@@ -605,7 +725,8 @@ write_node_assets() {
+       printf 'NODE_LINK_DELAY_MS="%s"\n\n' "${LINK_DELAY_MS}"
+       printf 'configure_network_node() {\n'
+       printf '  ip link set dev lo up\n'
+-      if is_federation_scenario "${scenario_name}" && { [[ "${node_id}" == "1" ]] || [[ "${node_id}" == "33" ]]; }; then
++      if is_federation_scenario "${scenario_name}" && ! is_cross_host_federation && \
++         { [[ "${node_id}" == "1" ]] || [[ "${node_id}" == "33" ]]; }; then
+         printf '  sysctl -w net.ipv4.ip_forward=1 >/dev/null\n'
+       fi
+       if [[ -z "${service_neighbor}" ]]; then
+@@ -631,7 +752,7 @@ write_node_assets() {
+           fi
+           printf ' limit "%s"\n' "${LINK_QUEUE_PACKETS}"
+         fi
+-        if is_federation_scenario "${scenario_name}" && \
++        if is_federation_scenario "${scenario_name}" && ! is_cross_host_federation && \
+            { [[ "${node_id}:${neighbor}" == "1:33" ]] || [[ "${node_id}:${neighbor}" == "33:1" ]]; }; then
+           federation_interface="eth${index}"
+           printf '  ip link set dev eth%s down\n' "${index}"
+@@ -643,11 +764,39 @@ write_node_assets() {
+         if [[ "${neighbor}" == "${node_id}" ]]; then
+           continue
+         fi
+-        if is_federation_scenario "${scenario_name}"; then
++        if is_cross_host_federation && \
++           ((neighbor < LOCAL_DOMAIN_LOW || neighbor > LOCAL_DOMAIN_HIGH)); then
++          [[ "${node_id}" != "${LOCAL_BORDER_ID}" ]] || continue
++          next_hop="${BORDER_NEXT_HOP[${node_id}]:-}"
++          [[ -n "${next_hop}" ]] || fail "missing cached border next hop for node ${node_id}"
++          route_via="${LINK_PEER_IP[${node_id}:${next_hop}]}"
++          route_dev=""
++          index=0
++          while IFS= read -r current_neighbor; do
++            [[ -n "${current_neighbor}" ]] || continue
++            if [[ "${current_neighbor}" == "${next_hop}" ]]; then
++              route_dev="eth${index}"
++              break
++            fi
++            index=$((index + 1))
++          done < <(sorted_physical_neighbors "${node_id}")
++          [[ -n "${route_dev}" ]] || fail "unable to map remote route device for node ${node_id}"
++          if [[ -n "${service_neighbor}" ]]; then
++            printf '  ip route replace "%s/32" via "%s" dev %s src "%s"\n' \
++              "$(loopback_ip "${neighbor}")" "${route_via}" "${route_dev}" \
++              "$(loopback_ip "${node_id}")"
++          else
++            printf '  ip route replace "%s/32" via "%s" dev %s\n' \
++              "$(loopback_ip "${neighbor}")" "${route_via}" "${route_dev}"
++          fi
++          continue
++        fi
++        if is_federation_scenario "${scenario_name}" && ! is_cross_host_federation; then
+           if ((node_id == 1 && neighbor > 32)); then continue; fi
+           if ((node_id == 33 && neighbor <= 32)); then continue; fi
+         fi
+-        if is_federation_scenario "${scenario_name}" && [[ "${RSYNC_FEDERATION_METHOD_VALUE}" == "nc" ]]; then
++        if is_federation_scenario "${scenario_name}" && ! is_cross_host_federation && \
++           [[ "${RSYNC_FEDERATION_METHOD_VALUE}" == "nc" ]]; then
+           if ((node_id <= 64)); then
+             if ((node_id <= 32 && neighbor > 32 && !(node_id == 1 && neighbor == 33))); then continue; fi
+             if ((node_id >= 33 && neighbor <= 32 && !(node_id == 33 && neighbor == 1))); then continue; fi
+@@ -717,6 +866,8 @@ write_node_assets() {
+           if [[ -n "${federation_interface}" ]]; then
+             printf 'export RSYNC_FEDERATION_INTERFACE="%s"\n' "${federation_interface}"
+           fi
++          printf 'export RSYNC_FEDERATION_ACTIVATION_MODE="%s"\n' \
++            "${RSYNC_FEDERATION_ACTIVATION_MODE_VALUE}"
+         fi
+         if [[ -n "${RSYNC_EXPERIMENT_CONTROL_DIR_VALUE}" ]]; then
+           printf 'export RSYNC_EXPERIMENT_CONTROL_DIR="%s"\n' "${RSYNC_EXPERIMENT_CONTROL_DIR_VALUE}"
+@@ -765,7 +916,9 @@ main() {
+ 
+   parse_topology "${scenario_file}"
+   build_edges
+-  if is_federation_scenario "${scenario_name}"; then
++  if is_federation_scenario "${scenario_name}" && is_cross_host_federation; then
++    build_cross_host_federation_physical_topology
++  elif is_federation_scenario "${scenario_name}"; then
+     build_federation_physical_topology
+   elif is_v3_scenario "${scenario_name}"; then
+     build_v3_physical_topology
+@@ -802,6 +955,9 @@ main() {
+   printf 'link_rate_mbit=%s\n' "${LINK_RATE_MBIT}"
+   printf 'link_queue_packets=%s\n' "${LINK_QUEUE_PACKETS}"
+   printf 'link_mtu=%s\n' "${LINK_MTU}"
++  printf 'federation_physical_mode=%s\n' "${FEDERATION_PHYSICAL_MODE}"
++  printf 'federation_shard=%s\n' "${FEDERATION_SHARD}"
++  printf 'federation_border_id=%s\n' "${LOCAL_BORDER_ID}"
+   printf 'rsync_observability=%s\n' "${RSYNC_OBSERVABILITY_VALUE}"
+   printf 'rsync_event_trace=%s\n' "${RSYNC_EVENT_TRACE_VALUE}"
+   printf 'rsync_event_trace_run_id=%s\n' "${RSYNC_EVENT_TRACE_RUN_ID_VALUE}"
+diff --git a/src/node.cpp b/src/node.cpp
+index e786f66..b7e6920 100644
+--- a/src/node.cpp
++++ b/src/node.cpp
+@@ -520,6 +520,26 @@ void Node::requestFileFromProvider(const std::string& key, uint32_t provider_nod
+     self_request_bf.add(key);
+     setQueryTable(id_, self_request_bf);
+ 
++    if (config_.staged_fallback_enabled) {
++        const auto uid = QueryTable::makeStableUid(
++            id_, next_origin_query_sequence_++);
++        const std::vector<QueryTable::OriginKey> origin_keys{
++            QueryTable::OriginKey{key, RequestPacket::signatureForKey(key)}};
++        if (!qt_.startOriginQuery(
++                uid, origin_keys, config_.fallback_delay,
++                config_.query_timeout, QueryTable::FallbackPolicy::Disabled)) {
++            throw std::runtime_error("Node: duplicate known-owner origin query UID");
++        }
++        rsync_trace::record(id_, "origin_query_tracked",
++                            {{"request_id", std::to_string(uid)},
++                             {"key", key},
++                             {"src", std::to_string(id_)},
++                             {"dest", std::to_string(provider_node_id)},
++                             {"via", "known-owner"},
++                             {"phase", "preferred"},
++                             {"fallback", "0"}});
++    }
++
+     auto pkt = RequestPacket::create(id_, std::vector<std::string>{key},
+                                      config_.bloom_bits, config_.bloom_hash_count);
+     pkt->dest_node_id = provider_node_id;
+diff --git a/src/query_table.hpp b/src/query_table.hpp
+index b27bce9..f54f165 100644
+--- a/src/query_table.hpp
++++ b/src/query_table.hpp
+@@ -25,6 +25,11 @@ public:
+     using ContentSignature = uint32_t;
+     using QueryUid = uint64_t;
+ 
++    enum class FallbackPolicy {
++        Enabled,
++        Disabled,
++    };
++
+     static constexpr QueryUid kStableUidBit = QueryUid{1} << 63;
+     static constexpr QueryUid kOriginMask = QueryUid{0x7fff};
+     static constexpr QueryUid kSequenceMask = (QueryUid{1} << 48) - 1;
+@@ -69,6 +74,7 @@ public:
+ 
+     struct OriginQuery {
+         QueryUid uid = 0;
++        FallbackPolicy fallback_policy = FallbackPolicy::Enabled;
+         std::unordered_map<std::string, ContentSignature> key_signatures;
+         std::unordered_set<std::string> unresolved_keys;
+         TimePoint first_sent_at{};
+@@ -269,12 +275,14 @@ public:
+     bool startOriginQuery(QueryUid uid, const std::vector<OriginKey>& keys,
+                           TimePoint now = Clock::now()) {
+         return startOriginQuery(uid, keys, config_.fallback_delay,
+-                                config_.state_lifetime, now);
++                                config_.state_lifetime,
++                                FallbackPolicy::Enabled, now);
+     }
+ 
+     bool startOriginQuery(QueryUid uid, const std::vector<OriginKey>& keys,
+                           std::chrono::milliseconds fallback_delay,
+                           std::chrono::milliseconds lifetime,
++                          FallbackPolicy fallback_policy = FallbackPolicy::Enabled,
+                           TimePoint now = Clock::now()) {
+         requireStableUid(uid);
+         validateDuration(fallback_delay, "fallback delay");
+@@ -292,6 +300,7 @@ public:
+ 
+         OriginQuery query;
+         query.uid = uid;
++        query.fallback_policy = fallback_policy;
+         query.first_sent_at = now;
+         query.fallback_deadline = now + fallback_delay;
+         query.expires_at = now + lifetime;
+@@ -361,7 +370,8 @@ public:
+         expire(now);
+         std::vector<DueOriginFallback> due;
+         for (auto& [uid, query] : origin_queries_) {
+-            if (query.completed_at.has_value() ||
++            if (query.fallback_policy == FallbackPolicy::Disabled ||
++                query.completed_at.has_value() ||
+                 query.fallback_triggered_at.has_value() ||
+                 now < query.fallback_deadline) {
+                 continue;
+diff --git a/tests/test_node_staged_fallback.cpp b/tests/test_node_staged_fallback.cpp
+index 222a3be..52f6c2b 100644
+--- a/tests/test_node_staged_fallback.cpp
++++ b/tests/test_node_staged_fallback.cpp
+@@ -203,6 +203,68 @@ void testDataBeforeDeadlineCancelsFallback() {
+     assert(deliveries == 1);
+ }
+ 
++void testKnownOwnerNonNeighborCompletesExactlyOnceWithoutFallback() {
++    auto network = std::make_unique<RecordingNetwork>(
++        std::vector<uint32_t>{11});
++    auto* recording = network.get();
++    Node node(10, std::move(network), std::make_unique<InMemoryCache>(),
++              fallbackConfig());
++    const std::string key = "known-owner-non-neighbor";
++    const Value value(std::vector<uint8_t>{21, 22, 23, 0, 24});
++    std::size_t deliveries = 0;
++    node.setApplicationCallback(
++        [&](const Node::ApplicationDelivery& delivery) {
++            assert(delivery.key == key);
++            assert(delivery.value.data() == value.data());
++            ++deliveries;
++        });
++
++    node.requestFileFromProvider(key, 99);
++    const auto preferred = requestPackets(*recording);
++    assert(preferred.size() == 1);
++    assert(preferred[0].destination == 99);
++    assert(!preferred[0].fallback);
++    const auto request_id = preferred[0].request_id;
++
++    recording->clearSent();
++    recording->inject(DataPacket::create(
++        request_id, 99, 10, key, value));
++    assert(node.processOne());
++    assert(deliveries == 1);
++
++    recording->inject(DataPacket::create(
++        request_id, 99, 10, key, value));
++    assert(node.processOne());
++    assert(deliveries == 1);
++
++    std::this_thread::sleep_for(30ms);
++    node.processOne();
++    assert(requestPackets(*recording).empty());
++
++    node.requestFileFromProvider(key, 99);
++    assert(deliveries == 2);
++    assert(requestPackets(*recording).empty());
++}
++
++void testKnownOwnerTimeoutNeverStartsFallback() {
++    auto network = std::make_unique<RecordingNetwork>(
++        std::vector<uint32_t>{11, 12});
++    auto* recording = network.get();
++    Node node(10, std::move(network), std::make_unique<InMemoryCache>(),
++              fallbackConfig());
++
++    node.requestFileFromProvider("known-owner-timeout", 99);
++    const auto initial = requestPackets(*recording);
++    assert(initial.size() == 1);
++    assert(initial[0].destination == 99);
++    assert(!initial[0].fallback);
++
++    recording->clearSent();
++    std::this_thread::sleep_for(30ms);
++    node.processOne();
++    assert(requestPackets(*recording).empty());
++}
++
+ void testDeadlineTriggersOnceAndDuplicateDataIsSuppressed() {
+     auto network = std::make_unique<RecordingNetwork>(
+         std::vector<uint32_t>{21});
+@@ -410,6 +472,8 @@ void testFallbackParentImprovementDoesNotPoisonDataReturn() {
+ int main() {
+     testImmediateFallbackWhenOnlyMatchIsUpstream();
+     testDataBeforeDeadlineCancelsFallback();
++    testKnownOwnerNonNeighborCompletesExactlyOnceWithoutFallback();
++    testKnownOwnerTimeoutNeverStartsFallback();
+     testDeadlineTriggersOnceAndDuplicateDataIsSuppressed();
+     testFallbackLoopAndDiamondDuplicatesAreSuppressed();
+     testCachedDataStillFulfilsPendingPreferredReversePathOnce();
+diff --git a/tests/test_query_table_fallback.cpp b/tests/test_query_table_fallback.cpp
+index 3ca7396..d68e519 100644
+--- a/tests/test_query_table_fallback.cpp
++++ b/tests/test_query_table_fallback.cpp
+@@ -163,6 +163,40 @@ void testDataWinsAtDeadline() {
+     assert(table.markDataSatisfiedByKey("unrelated", at(1501ms)).empty());
+ }
+ 
++void testFallbackDisabledOriginTracksExactCompletionWithoutFallback() {
++    QueryTable table;
++    const auto uid = QueryTable::makeStableUid(5, 10);
++    assert(table.startOriginQuery(
++        uid, {{"known-owner-key", 77}}, 1500ms, 7000ms,
++        QueryTable::FallbackPolicy::Disabled, at(0ms)));
++
++    const auto tracked = table.originQuery(uid);
++    assert(tracked.has_value());
++    assert(tracked->fallback_policy == QueryTable::FallbackPolicy::Disabled);
++    assert(table.takeDueOriginFallbacks(at(1500ms)).empty());
++    assert(table.takeDueOriginFallbacks(at(6999ms)).empty());
++
++    const auto satisfied = table.markDataSatisfied(
++        uid, "known-owner-key", at(2000ms));
++    assert(satisfied.query_known);
++    assert(satisfied.key_expected);
++    assert(satisfied.newly_satisfied);
++    assert(satisfied.query_complete);
++
++    const auto expired = table.expire(at(7000ms));
++    assert(expired.origin_queries == 1);
++    assert(expired.origin_unsatisfied == 0);
++
++    const auto missing_uid = QueryTable::makeStableUid(5, 11);
++    assert(table.startOriginQuery(
++        missing_uid, {{"missing-known-owner-key", 88}}, 1500ms, 7000ms,
++        QueryTable::FallbackPolicy::Disabled, at(8000ms)));
++    assert(table.takeDueOriginFallbacks(at(9500ms)).empty());
++    const auto missing_expired = table.expire(at(15000ms));
++    assert(missing_expired.origin_queries == 1);
++    assert(missing_expired.origin_unsatisfied == 1);
++}
++
+ void testFallbackBestHopAndEgressSuppression() {
+     QueryTable table;
+     const auto uid = QueryTable::makeStableUid(54, 99);
+@@ -259,6 +293,7 @@ int main() {
+     testPendingDataObligationsAreConsumedOnce();
+     testOriginDeadlineAndExactKeys();
+     testDataWinsAtDeadline();
++    testFallbackDisabledOriginTracksExactCompletionWithoutFallback();
+     testFallbackBestHopAndEgressSuppression();
+     testExpiryAndTombstone();
+     std::cout << "query_table_fallback: all tests passed\n";

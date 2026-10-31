@@ -1,0 +1,725 @@
+{
+  "schema_version": 1,
+  "created_at": "2026-10-31T13:45:00+08:00",
+  "archive": {
+    "branch": "main",
+    "remote_configured": false,
+    "contains_paper": false,
+    "contains_result_data": false
+  },
+  "policy": {
+    "mode": "code-only working-tree export",
+    "included": [
+      "source code",
+      "build configuration",
+      "test code",
+      "experiment drivers",
+      "topology configuration",
+      "small manifests and documentation"
+    ],
+    "excluded": [
+      "paper and vldb submodule",
+      "CSV/TSV/JSONL/trace measurements",
+      "raw, results, output, collected, derived, deliveries",
+      "evidence, workload, paper-asset summary, clock-probe, state, build and dependency directories",
+      "PDF, images, archives, logs, binaries and CMake caches"
+    ],
+    "working_tree": "included; commit and dirty counts recorded per source",
+    "patches": {
+      "patches/vc/networkcache-r2-tracked.patch": {
+        "source": "vc/networkcache-r2",
+        "files": 10
+      },
+      "patches/vc-1/networkcache-r2-tracked.patch": {
+        "source": "vc-1/networkcache-r2",
+        "files": 10,
+        "identical_to": "patches/vc/networkcache-r2-tracked.patch"
+      },
+      "patches/simple-station/rsync-tracked.patch": {
+        "source": "simple-station/rsync",
+        "files": 13
+      }
+    },
+    "skipped_dirty_data": {
+      "vc-2/concurrency-pre64post96-v2": "220 tracked workload JSON/TSV changes",
+      "simple-station/concurrency-pre64post96-v1": "220 tracked workload JSON/TSV changes",
+      "vc-2/concurrency-supplement-v1": "299 untracked runtime artifacts, no tracked code changes",
+      "simple-station/concurrency-supplement-v1": "299 untracked runtime artifacts, no tracked code changes",
+      "xiaoxin-ubuntu/rsync": "74 untracked experiment/build artifacts plus paper submodule pointer"
+    }
+  },
+  "sources": [
+    {
+      "id": "simple-station/concurrency-capacity-v1",
+      "host": "simple-station",
+      "transport": "simple-station",
+      "remote_path": "/home/simpleai/zhengzihao/networkcache-concurrency-capacity-v1/source",
+      "target": "snapshots/simple-station/concurrency-capacity-v1",
+      "git": {
+        "head": "ac2fc775c43d718222d66cbe3ad80dea8c3b42e5",
+        "branch": "simple-station/concurrency-capacity-v1",
+        "tree": "f2bbb2a69a8d0204fd9a31649c1eefd8b3cfed9f",
+        "origin": "/home/simpleai/zhengzihao/networkcache-concurrency-slides-v5/source",
+        "tracked": 535,
+        "dirty": 0,
+        "tracked_dirty": 0
+      },
+      "code": {
+        "file_count": 519,
+        "bytes": 3608666,
+        "content_sha256": "38743fbce2549495261107606aed9c2ce66c32bb248a1ced2d4ff275da44ece0"
+      }
+    },
+    {
+      "id": "simple-station/concurrency-pre48-v1",
+      "host": "simple-station",
+      "transport": "simple-station",
+      "remote_path": "/home/simpleai/zhengzihao/networkcache-concurrency-pre48-v1/source",
+      "target": "snapshots/simple-station/concurrency-pre48-v1",
+      "git": {
+        "head": "ba464923ef8c9d49fe0d55c8cf54b716787d588b",
+        "branch": "simple-station/concurrency-supplement-v1",
+        "tree": "05cdd5804acefbc0ebb15a583f8c8643777e05e5",
+        "origin": "/home/simpleai/zhengzihao/networkcache-concurrency-slides-v5/source",
+        "tracked": 1246,
+        "dirty": 1,
+        "tracked_dirty": 0
+      },
+      "code": {
+        "file_count": 503,
+        "bytes": 3495718,
+        "content_sha256": "aa7dac931330b8f52a08ddc8bd697ea3ff8f1bcc4b933aeec2c79c80d803f788"
+      }
+    },
+    {
+      "id": "simple-station/concurrency-pre64post96-v1",
+      "host": "simple-station",
+      "transport": "simple-station",
+      "remote_path": "/home/simpleai/zhengzihao/networkcache-concurrency-pre64post96-v1/source",
+      "target": "snapshots/simple-station/concurrency-pre64post96-v1",
+      "git": {
+        "head": "36f315c109856bbf522b0c31b36e6abaa3cad184",
+        "branch": "simple-station/concurrency-supplement-v1",
+        "tree": "3aebef05597cfa0ecc3e0d869976ac7695498b09",
+        "origin": "/home/simpleai/zhengzihao/networkcache-concurrency-slides-v5/source",
+        "tracked": 1274,
+        "dirty": 220,
+        "tracked_dirty": 220
+      },
+      "code": {
+        "file_count": 503,
+        "bytes": 3495719,
+        "content_sha256": "f1d906b34be3edbabe70c4a142df25aa298b338f42c04fde96914e5018366a6a"
+      }
+    },
+    {
+      "id": "simple-station/concurrency-slides-v5",
+      "host": "simple-station",
+      "transport": "simple-station",
+      "remote_path": "/home/simpleai/zhengzihao/networkcache-concurrency-slides-v5/source",
+      "target": "snapshots/simple-station/concurrency-slides-v5",
+      "git": {
+        "head": "0e564144356c021ad834dda63755e28a3c349915",
+        "branch": "simple-station/concurrency-slides-v5",
+        "tree": "b7040a9d6fec247f3d05fcb1e336f9cb594445ef",
+        "origin": "/data/networkcache-concurrency-slides-v4/source",
+        "tracked": 516,
+        "dirty": 0,
+        "tracked_dirty": 0
+      },
+      "code": {
+        "file_count": 500,
+        "bytes": 3452919,
+        "content_sha256": "b7aeea6e4e621d75f11738ce378cbbe51ad88d46f6744ef2f09c6ca9f49373c3"
+      }
+    },
+    {
+      "id": "simple-station/concurrency-supplement-v1",
+      "host": "simple-station",
+      "transport": "simple-station",
+      "remote_path": "/home/simpleai/zhengzihao/networkcache-concurrency-supplement-v1/source",
+      "target": "snapshots/simple-station/concurrency-supplement-v1",
+      "git": {
+        "head": "02b33782e3305d29efe4f7c84afe95b21b1a228b",
+        "branch": "simple-station/concurrency-supplement-v1",
+        "tree": "cac587bdf42b1c9880493987ab10966cf52f3623",
+        "origin": "/home/simpleai/zhengzihao/networkcache-concurrency-slides-v5/source",
+        "tracked": 519,
+        "dirty": 299,
+        "tracked_dirty": 0
+      },
+      "code": {
+        "file_count": 503,
+        "bytes": 3495548,
+        "content_sha256": "0934ec04ed0ea01419f4523f107ef2b38a245f1af1ab00096b157c7f8d807d60"
+      }
+    },
+    {
+      "id": "simple-station/finite-cache-v1/02f4b116",
+      "host": "simple-station",
+      "transport": "simple-station",
+      "remote_path": "/home/simpleai/zhengzihao/networkcache-concurrency-finite-cache-v1/versions/02f4b116/source",
+      "target": "snapshots/simple-station/finite-cache-v1/02f4b116",
+      "git": {
+        "kind": "non-git-working-tree"
+      },
+      "code": {
+        "file_count": 535,
+        "bytes": 4050757,
+        "content_sha256": "7862ada920ad6bf91e6825ac3f43d637fd39bee878daf2dda42aab7ed82e6f3b"
+      }
+    },
+    {
+      "id": "simple-station/finite-cache-v1/03caf15c",
+      "host": "simple-station",
+      "transport": "simple-station",
+      "remote_path": "/home/simpleai/zhengzihao/networkcache-concurrency-finite-cache-v1/versions/03caf15c/source",
+      "target": "snapshots/simple-station/finite-cache-v1/03caf15c",
+      "git": {
+        "kind": "non-git-working-tree"
+      },
+      "code": {
+        "file_count": 537,
+        "bytes": 4067964,
+        "content_sha256": "4316f3fa5774c7fcb97f84e7d7255603fd05eef3d9b38f22e30880a8561e53da"
+      }
+    },
+    {
+      "id": "simple-station/finite-cache-v1/3aac7b22",
+      "host": "simple-station",
+      "transport": "simple-station",
+      "remote_path": "/home/simpleai/zhengzihao/networkcache-concurrency-finite-cache-v1/versions/3aac7b22/source",
+      "target": "snapshots/simple-station/finite-cache-v1/3aac7b22",
+      "git": {
+        "kind": "non-git-working-tree"
+      },
+      "code": {
+        "file_count": 537,
+        "bytes": 4068081,
+        "content_sha256": "c1214151f5f4555df4ad7f2f1f483f8bbcc5319b804ed3b1f46c96e753b49d0e"
+      }
+    },
+    {
+      "id": "simple-station/finite-cache-v1/a0469dea-experiments",
+      "host": "simple-station",
+      "transport": "simple-station",
+      "remote_path": "/home/simpleai/zhengzihao/networkcache-concurrency-finite-cache-v1/versions/a0469dea/experiments",
+      "target": "snapshots/simple-station/finite-cache-v1/a0469dea-experiments",
+      "git": {
+        "kind": "non-git-working-tree"
+      },
+      "code": {
+        "file_count": 7,
+        "bytes": 107292,
+        "content_sha256": "446105b8dc58a979a55702fa6d08ca7ae60796dda06b39b84d0c70bad2176713"
+      }
+    },
+    {
+      "id": "simple-station/finite-cache-v1/base",
+      "host": "simple-station",
+      "transport": "simple-station",
+      "remote_path": "/home/simpleai/zhengzihao/networkcache-concurrency-finite-cache-v1/source",
+      "target": "snapshots/simple-station/finite-cache-v1/base",
+      "git": {
+        "kind": "non-git-working-tree"
+      },
+      "code": {
+        "file_count": 534,
+        "bytes": 4004037,
+        "content_sha256": "ff95dca7b3c2fb330b2ec5bcec3f7b329b0f21bdee3284eba10e8aa3f5ddd80e"
+      }
+    },
+    {
+      "id": "simple-station/finite-cache-v1/smoke-81c22fe9",
+      "host": "simple-station",
+      "transport": "simple-station",
+      "remote_path": "/home/simpleai/zhengzihao/networkcache-concurrency-finite-cache-v1/smoke-src/81c22fe9/source",
+      "target": "snapshots/simple-station/finite-cache-v1/smoke-81c22fe9",
+      "git": {
+        "kind": "non-git-working-tree"
+      },
+      "code": {
+        "file_count": 540,
+        "bytes": 4118172,
+        "content_sha256": "cb4778626ef5616a477557845eebe513ffcdfad8f2f62f29e51ccea8526fe7ca"
+      }
+    },
+    {
+      "id": "simple-station/pilot-bootstrap",
+      "host": "simple-station",
+      "transport": "simple-station",
+      "remote_path": "/home/simpleai/zhengzihao/networkcache-pilot-bootstrap",
+      "target": "snapshots/simple-station/pilot-bootstrap",
+      "git": {
+        "kind": "non-git-working-tree"
+      },
+      "code": {
+        "file_count": 3,
+        "bytes": 4605,
+        "content_sha256": "e109b5692a7a3377c22806c61965f205c6867be3414f86da6287ea980963c932"
+      }
+    },
+    {
+      "id": "simple-station/rsync",
+      "host": "simple-station",
+      "transport": "simple-station",
+      "remote_path": "/home/simpleai/zhengzihao/rsync",
+      "target": "snapshots/simple-station/rsync",
+      "git": {
+        "head": "2abc0602f53e813b96985071f680d9b0473eb209",
+        "branch": "DETACHED",
+        "tree": "cd09716085938de49449760ec622ef73ced74723",
+        "origin": "/home/simpleai/zhengzihao/networkcache-pilot-bootstrap/repo.bundle",
+        "tracked": 3767,
+        "dirty": 32,
+        "tracked_dirty": 13
+      },
+      "code": {
+        "file_count": 591,
+        "bytes": 3237815,
+        "content_sha256": "f49b759c622324698aa258e8a3dada3dd14f83f740c1d5687f335750f0e37ebf"
+      }
+    },
+    {
+      "id": "vc-1/networkcache-r2",
+      "host": "vc-1",
+      "transport": "vc-1",
+      "remote_path": "/data/networkcache-r2/worktree",
+      "target": "snapshots/vc-1/networkcache-r2",
+      "git": {
+        "head": "2abc0602f53e813b96985071f680d9b0473eb209",
+        "branch": "DETACHED",
+        "tree": "cd09716085938de49449760ec622ef73ced74723",
+        "origin": "/data/networkcache-r2/baseline/repo.bundle",
+        "tracked": 3767,
+        "dirty": 22,
+        "tracked_dirty": 10
+      },
+      "code": {
+        "file_count": 599,
+        "bytes": 3326156,
+        "content_sha256": "ccebe5cdeae23a34962359f7ad2061f90d0c88dd669cdb548c1c33d5c9bcf386"
+      }
+    },
+    {
+      "id": "vc-2/concurrency-pilot-v1",
+      "host": "vc-2",
+      "transport": "vc-2",
+      "remote_path": "/data/networkcache-concurrency-pilot-v1/source",
+      "target": "snapshots/vc-2/concurrency-pilot-v1",
+      "git": {
+        "head": "8c620fb61b2d4be59e36629ad5acf251a159c76a",
+        "branch": "codex/single-cluster-concurrency-pilot-v1",
+        "tree": "29f3058be7c9008633c81d93989d549fb0511923",
+        "origin": "tracked=399",
+        "tracked": null,
+        "dirty": 0,
+        "tracked_dirty": 0
+      },
+      "code": {
+        "file_count": 384,
+        "bytes": 2463098,
+        "content_sha256": "ab4b9d68602ceccc79f33ed5b8d3946e8b20e7d2012881a72dddb3182ad6d14a"
+      }
+    },
+    {
+      "id": "vc-2/concurrency-pilot-v2",
+      "host": "vc-2",
+      "transport": "vc-2",
+      "remote_path": "/data/networkcache-concurrency-pilot-v2/source",
+      "target": "snapshots/vc-2/concurrency-pilot-v2",
+      "git": {
+        "head": "d2a4d6fe871aa25c754e0a85f5505d074fb2d426",
+        "branch": "codex/single-cluster-concurrency-pilot-v2",
+        "tree": "eb06511948f9d6b3944c338703d3f651e8a9c683",
+        "origin": "/data/networkcache-concurrency-pilot-v1/source",
+        "tracked": 407,
+        "dirty": 0,
+        "tracked_dirty": 0
+      },
+      "code": {
+        "file_count": 391,
+        "bytes": 2536596,
+        "content_sha256": "e764e5e75752368ad7a2987a0b6797f63e1189e736fc64a375bbd7cfd3dbd3bf"
+      }
+    },
+    {
+      "id": "vc-2/concurrency-pilot-v3",
+      "host": "vc-2",
+      "transport": "vc-2",
+      "remote_path": "/data/networkcache-concurrency-pilot-v3/source",
+      "target": "snapshots/vc-2/concurrency-pilot-v3",
+      "git": {
+        "head": "69987c6ccea573e384dd2956fdc42e342cd26043",
+        "branch": "codex/single-cluster-concurrency-pilot-v3",
+        "tree": "e5ed8acffa723daf047429e5f18c07d27318cce9",
+        "origin": "/data/networkcache-concurrency-pilot-v2/source",
+        "tracked": 416,
+        "dirty": 0,
+        "tracked_dirty": 0
+      },
+      "code": {
+        "file_count": 400,
+        "bytes": 2610644,
+        "content_sha256": "6769053089cb9802c8dae919a3e053f48c99a5c7e0a6ce2ebe9761b3382a185e"
+      }
+    },
+    {
+      "id": "vc-2/concurrency-pilot-v4",
+      "host": "vc-2",
+      "transport": "vc-2",
+      "remote_path": "/data/networkcache-concurrency-pilot-v4/source",
+      "target": "snapshots/vc-2/concurrency-pilot-v4",
+      "git": {
+        "head": "28bfc10bfe418398056bf11b7477fc09f6b80a89",
+        "branch": "codex/single-cluster-concurrency-pilot-v4",
+        "tree": "2267032f14cd636db3a2e46ea46304998190da67",
+        "origin": "/data/networkcache-concurrency-pilot-v2/source",
+        "tracked": 416,
+        "dirty": 0,
+        "tracked_dirty": 0
+      },
+      "code": {
+        "file_count": 400,
+        "bytes": 2616154,
+        "content_sha256": "77329be921518267c2d4bac97f263877d5e9ca3bdf2b39e1997eca086124d362"
+      }
+    },
+    {
+      "id": "vc-2/concurrency-pilot-v5",
+      "host": "vc-2",
+      "transport": "vc-2",
+      "remote_path": "/data/networkcache-concurrency-pilot-v5/source",
+      "target": "snapshots/vc-2/concurrency-pilot-v5",
+      "git": {
+        "head": "78617f707b1afb7c665b4cef32d2cbce3c82007c",
+        "branch": "codex/single-cluster-concurrency-pilot-v5",
+        "tree": "69047ed68968a486137f7a9a9de490e7ee84114d",
+        "origin": "/data/networkcache-concurrency-pilot-v4/source",
+        "tracked": 424,
+        "dirty": 0,
+        "tracked_dirty": 0
+      },
+      "code": {
+        "file_count": 408,
+        "bytes": 2693326,
+        "content_sha256": "7338c2b324a1cb49e3118287c2b0160c8457e53a118a28345d28a4e3acfa4d28"
+      }
+    },
+    {
+      "id": "vc-2/concurrency-pilot-v6",
+      "host": "vc-2",
+      "transport": "vc-2",
+      "remote_path": "/data/networkcache-concurrency-pilot-v6/source",
+      "target": "snapshots/vc-2/concurrency-pilot-v6",
+      "git": {
+        "head": "60dccecff75095221c99a5920cb8d04a628778d2",
+        "branch": "codex/single-cluster-concurrency-pilot-v6",
+        "tree": "b44e7f4c0701231cfb4028f9d97473265a2d994e",
+        "origin": "/data/networkcache-concurrency-pilot-v5/source",
+        "tracked": 434,
+        "dirty": 0,
+        "tracked_dirty": 0
+      },
+      "code": {
+        "file_count": 418,
+        "bytes": 2779073,
+        "content_sha256": "050fb3a0564deeb974010b64cf3dd41450c0ce4355235df5c883e55d8af4049a"
+      }
+    },
+    {
+      "id": "vc-2/concurrency-pilot-v7",
+      "host": "vc-2",
+      "transport": "vc-2",
+      "remote_path": "/data/networkcache-concurrency-pilot-v7/source",
+      "target": "snapshots/vc-2/concurrency-pilot-v7",
+      "git": {
+        "head": "d0cb71fc5e324d3722b7efac61011eeae18d5845",
+        "branch": "codex/single-cluster-concurrency-pilot-v7",
+        "tree": "8889509734c097087d6b66ea4cc78ace49f94a5a",
+        "origin": "/data/networkcache-concurrency-pilot-v6/source",
+        "tracked": 444,
+        "dirty": 0,
+        "tracked_dirty": 0
+      },
+      "code": {
+        "file_count": 428,
+        "bytes": 2867534,
+        "content_sha256": "91caf2bdbc1fd817277ab3b5c9f9badd7b061a7831452e3b545a0a563aa351cd"
+      }
+    },
+    {
+      "id": "vc-2/concurrency-pilot-v8",
+      "host": "vc-2",
+      "transport": "vc-2",
+      "remote_path": "/data/networkcache-concurrency-pilot-v8/source",
+      "target": "snapshots/vc-2/concurrency-pilot-v8",
+      "git": {
+        "head": "b895c17ddbf850ca73bddc7de3a2d095eecd185d",
+        "branch": "codex/single-cluster-concurrency-pilot-v8",
+        "tree": "d8948c932f5f4880895348cae237425b381c6442",
+        "origin": "/data/networkcache-concurrency-pilot-v7/source",
+        "tracked": 456,
+        "dirty": 0,
+        "tracked_dirty": 0
+      },
+      "code": {
+        "file_count": 440,
+        "bytes": 2964417,
+        "content_sha256": "c49780adef4e4a0cf5c8bdabb1c3ce3684c960b3eba068728f92d7cd03b8936c"
+      }
+    },
+    {
+      "id": "vc-2/concurrency-pilot-v9",
+      "host": "vc-2",
+      "transport": "vc-2",
+      "remote_path": "/data/networkcache-concurrency-pilot-v9/source",
+      "target": "snapshots/vc-2/concurrency-pilot-v9",
+      "git": {
+        "head": "6a14e6dddae7d16a27f1b23890c01693913617a5",
+        "branch": "codex/single-cluster-concurrency-pilot-v9",
+        "tree": "f51ba5930a10ab7fde887e86a8e7e3e3abe8016e",
+        "origin": "/data/networkcache-concurrency-pilot-v8/source",
+        "tracked": 466,
+        "dirty": 0,
+        "tracked_dirty": 0
+      },
+      "code": {
+        "file_count": 450,
+        "bytes": 3060186,
+        "content_sha256": "48e51a40435a6ef41526fb8d735ae5c4c387ee13eb90db888eff245a050750d6"
+      }
+    },
+    {
+      "id": "vc-2/concurrency-pre48-v2",
+      "host": "vc-2",
+      "transport": "vc-2",
+      "remote_path": "/data/networkcache-concurrency-pre48-v2/source",
+      "target": "snapshots/vc-2/concurrency-pre48-v2",
+      "git": {
+        "head": "3385412984a1535f172a9458c14c6daf5d8721bf",
+        "branch": "codex/concurrency-supplement-v1",
+        "tree": "8013dc758ff99ae700622595eae6e36ecea3766c",
+        "origin": "/data/networkcache-concurrency-supplement-v1/source",
+        "tracked": 832,
+        "dirty": 0,
+        "tracked_dirty": 0
+      },
+      "code": {
+        "file_count": 508,
+        "bytes": 3535242,
+        "content_sha256": "d9c31b51085b37fd8c1aca91debd951aa0247de33bd150916de5975cecc00adc"
+      }
+    },
+    {
+      "id": "vc-2/concurrency-pre64post96-v2",
+      "host": "vc-2",
+      "transport": "vc-2",
+      "remote_path": "/data/networkcache-concurrency-pre64post96-v2/source",
+      "target": "snapshots/vc-2/concurrency-pre64post96-v2",
+      "git": {
+        "head": "0e1526cc66815c60725a31ca1ec69520955c7056",
+        "branch": "codex/concurrency-supplement-v1",
+        "tree": "2afaa2379c794c260f3d25b388f5a65157800b5b",
+        "origin": "/data/networkcache-concurrency-supplement-v1/source",
+        "tracked": 832,
+        "dirty": 220,
+        "tracked_dirty": 220
+      },
+      "code": {
+        "file_count": 508,
+        "bytes": 3535243,
+        "content_sha256": "cf81e90c7d337c19da98e740358e3864c6846f9fd872fc0e14b3036e94db6ad4"
+      }
+    },
+    {
+      "id": "vc-2/concurrency-slides-v1",
+      "host": "vc-2",
+      "transport": "vc-2",
+      "remote_path": "/data/networkcache-concurrency-slides-v1/source",
+      "target": "snapshots/vc-2/concurrency-slides-v1",
+      "git": {
+        "head": "d4beb04add1e5f1d24b5e5c76136f782b97feefd",
+        "branch": "codex/concurrency-slides-v1",
+        "tree": "eb9d11a57267491a449dea01dfba98f00b2b5bc9",
+        "origin": "/data/networkcache-concurrency-pilot-v9/source",
+        "tracked": 481,
+        "dirty": 0,
+        "tracked_dirty": 0
+      },
+      "code": {
+        "file_count": 465,
+        "bytes": 3184996,
+        "content_sha256": "76b36b461497c1dc170d4a085627aada329f17dc8740c33cdaf0130812ff5ac1"
+      }
+    },
+    {
+      "id": "vc-2/concurrency-slides-v2",
+      "host": "vc-2",
+      "transport": "vc-2",
+      "remote_path": "/data/networkcache-concurrency-slides-v2/source",
+      "target": "snapshots/vc-2/concurrency-slides-v2",
+      "git": {
+        "head": "25dadf2cb8b6a2879316b9b631251aa0f8023f0f",
+        "branch": "codex/concurrency-slides-v2",
+        "tree": "6df1f23fcf6d12b78fda35f7be917bde284147be",
+        "origin": "/data/networkcache-concurrency-slides-v1/source",
+        "tracked": 496,
+        "dirty": 0,
+        "tracked_dirty": 0
+      },
+      "code": {
+        "file_count": 480,
+        "bytes": 3312166,
+        "content_sha256": "bf7d387a9becd1bfef84cc6647f6fd79297594cae65f874b9a79c2848384c2ac"
+      }
+    },
+    {
+      "id": "vc-2/concurrency-slides-v3",
+      "host": "vc-2",
+      "transport": "vc-2",
+      "remote_path": "/data/networkcache-concurrency-slides-v3/source",
+      "target": "snapshots/vc-2/concurrency-slides-v3",
+      "git": {
+        "head": "4951e84c850a569b57b3d62981cd8736410b7529",
+        "branch": "codex/concurrency-slides-v3",
+        "tree": "0192417eae876214cff9d8a8d5ceccc3d528d271",
+        "origin": "/data/networkcache-concurrency-slides-v1/source",
+        "tracked": 497,
+        "dirty": 0,
+        "tracked_dirty": 0
+      },
+      "code": {
+        "file_count": 481,
+        "bytes": 3310669,
+        "content_sha256": "e50cc0fb066dc23cf1ec85d2bd729315cb2b320d3a6dff2c2d4410f3433590a2"
+      }
+    },
+    {
+      "id": "vc-2/concurrency-slides-v4",
+      "host": "vc-2",
+      "transport": "vc-2",
+      "remote_path": "/data/networkcache-concurrency-slides-v4/source",
+      "target": "snapshots/vc-2/concurrency-slides-v4",
+      "git": {
+        "head": "e719f746e7ca914a09455a515ae7cb7400bf18a5",
+        "branch": "codex/concurrency-slides-v4",
+        "tree": "0a75aa446a4df71dc8761042a2c365c9586e0a15",
+        "origin": "/data/networkcache-concurrency-slides-v1/source",
+        "tracked": 497,
+        "dirty": 0,
+        "tracked_dirty": 0
+      },
+      "code": {
+        "file_count": 481,
+        "bytes": 3311967,
+        "content_sha256": "e0acf18bc38eed30246cee7274a6b0b8db4326869a1dbac907fb76de5f1294c1"
+      }
+    },
+    {
+      "id": "vc-2/concurrency-slides-v5",
+      "host": "vc-2",
+      "transport": "vc-2",
+      "remote_path": "/data/networkcache-concurrency-slides-v5/source",
+      "target": "snapshots/vc-2/concurrency-slides-v5",
+      "git": {
+        "head": "68fd22462c86b853c62a64aa39d6893f2217c50a",
+        "branch": "codex/concurrency-slides-v5",
+        "tree": "3033c3418fbe7d1cd2d8dd3d6d3cc65fe68dbe9c",
+        "origin": "/data/networkcache-concurrency-slides-v4/source",
+        "tracked": 515,
+        "dirty": 0,
+        "tracked_dirty": 0
+      },
+      "code": {
+        "file_count": 499,
+        "bytes": 3447921,
+        "content_sha256": "6755e257bc4f6e2652f2c9293209234289ef6b1a3cca8dd2df55c985dbad8c99"
+      }
+    },
+    {
+      "id": "vc-2/concurrency-supplement-v1",
+      "host": "vc-2",
+      "transport": "vc-2",
+      "remote_path": "/data/networkcache-concurrency-supplement-v1/source",
+      "target": "snapshots/vc-2/concurrency-supplement-v1",
+      "git": {
+        "head": "d7aeb720b453182a00fcb9c5fc463cd86bd2aa6a",
+        "branch": "codex/concurrency-supplement-v1",
+        "tree": "c58f692c5c2cdb15a246d9cef05c88f74bbdf235",
+        "origin": "/data/networkcache-concurrency-slides-v5/source",
+        "tracked": 524,
+        "dirty": 299,
+        "tracked_dirty": 0
+      },
+      "code": {
+        "file_count": 508,
+        "bytes": 3535083,
+        "content_sha256": "b5f56ea7988211b28c5d1e77ec83c4a52e1d0cabde87b3c1ff134b18031a73a5"
+      }
+    },
+    {
+      "id": "vc-2/concurrency-supplement-v2",
+      "host": "vc-2",
+      "transport": "vc-2",
+      "remote_path": "/data/networkcache-concurrency-supplement-v2/source",
+      "target": "snapshots/vc-2/concurrency-supplement-v2",
+      "git": {
+        "head": "d7aeb720b453182a00fcb9c5fc463cd86bd2aa6a",
+        "branch": "codex/concurrency-supplement-v1",
+        "tree": "c58f692c5c2cdb15a246d9cef05c88f74bbdf235",
+        "origin": "/data/networkcache-concurrency-supplement-v1/source",
+        "tracked": 524,
+        "dirty": 0,
+        "tracked_dirty": 0
+      },
+      "code": {
+        "file_count": 508,
+        "bytes": 3535083,
+        "content_sha256": "b5f56ea7988211b28c5d1e77ec83c4a52e1d0cabde87b3c1ff134b18031a73a5"
+      }
+    },
+    {
+      "id": "vc/networkcache-r2",
+      "host": "vc",
+      "transport": "vc",
+      "remote_path": "/data/networkcache-r2/worktree",
+      "target": "snapshots/vc/networkcache-r2",
+      "git": {
+        "head": "2abc0602f53e813b96985071f680d9b0473eb209",
+        "branch": "DETACHED",
+        "tree": "cd09716085938de49449760ec622ef73ced74723",
+        "origin": "/data/networkcache-r2/baseline/repo.bundle",
+        "tracked": 3767,
+        "dirty": 22,
+        "tracked_dirty": 10
+      },
+      "code": {
+        "file_count": 599,
+        "bytes": 3326160,
+        "content_sha256": "cf2d5d55f37cce099b98e3dff9d3e9e8166d9acce2985989e4e9fa818514928a"
+      }
+    },
+    {
+      "id": "xiaoxin-ubuntu/rsync",
+      "host": "xiaoxin-ubuntu",
+      "transport": "xiaoxin",
+      "remote_path": "/root/zzh/rsync",
+      "target": "mainline",
+      "git": {
+        "head": "1b8b9753859a837c3ae9525a8c85e787caf89975",
+        "branch": "experiments/finite-cache-v1",
+        "tree": "59e9308a2ac6a8eda1580bb61b0a7deaa7acb483",
+        "origin": "git@github.com:Network-Cache/rsync.git",
+        "tracked": 7206,
+        "dirty": 75,
+        "tracked_dirty": 1
+      },
+      "code": {
+        "file_count": 751,
+        "bytes": 4880254,
+        "content_sha256": "f4355f3f67c48532a5c864cbcd473d00d18cb08df2efb693592b432ef8bef364"
+      }
+    }
+  ]
+}

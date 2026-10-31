@@ -1,0 +1,10 @@
+{
+  "note": "sha256 of the reusable modules copied verbatim from concurrency_slides_v5 (simple-station ported base, branch simple-station/concurrency-slides-v5). The capacity suite must not modify protocol/measurement semantics; test_capacity_reports asserts these hashes.",
+  "analysis.py": "c00fe6b5492d7efba781baa7ddd1017572ff041eea9e58282018cbac0dff208f",
+  "controller.py": "7cab25b6c44bcb78f90f2c384bc5f69c3f1ec91e89c057561ec86306936f6053",
+  "federation.py": "ad0b0c12db3ccc74bed2c93940b52ba63e0d9bf97c6498a9b9e2c1992e0eb267",
+  "kathara_bridge.py": "9b66a8b2701a9951a1f8e1f888e64cf6e96ae69e93c1ec2c179da728bc311b60",
+  "network_backend.py": "a5f5b0628551d5b1498fd46022452135fef3128770db85fc54c0da59b5ac2183",
+  "start-node.sh": "b1d97785c7c35dddea5e5dbfefc57ceb5b15d184bd4e183e587d2b59a6974144",
+  "tcp_node.py": "af46039287ef1852dc6e07f53117b16726b0df2afe0650d71dde4864dae703ad"
+}

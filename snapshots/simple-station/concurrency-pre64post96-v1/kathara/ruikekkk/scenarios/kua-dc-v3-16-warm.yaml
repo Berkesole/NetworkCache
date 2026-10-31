@@ -1,0 +1,48 @@
+# Generated Kua-DC v3 single-key workload for kua-dc-v3-16.
+# Protocol nodes are hosts only; Kathara renderer adds pure L3 leaf/spine switches.
+# Do not edit by hand; regenerate with scripts/generate_workloads_v3.py.
+# physical: hosts=16 leaves=4 spines=4
+protocol:
+  max_hop_count: 8
+
+nodes:
+- id: 1
+  neighbors: [2, 3, 4, 5, 13]
+- id: 2
+  neighbors: [1]
+- id: 3
+  neighbors: [1]
+- id: 4
+  neighbors: [1]
+- id: 5
+  neighbors: [1, 6, 7, 8, 9]
+- id: 6
+  neighbors: [5]
+- id: 7
+  neighbors: [5]
+- id: 8
+  neighbors: [5]
+- id: 9
+  neighbors: [5, 10, 11, 12, 13]
+- id: 10
+  neighbors: [9]
+- id: 11
+  neighbors: [9]
+- id: 12
+  neighbors: [9]
+- id: 13
+  neighbors: [1, 9, 14, 15, 16]
+- id: 14
+  neighbors: [13]
+- id: 15
+  neighbors: [13]
+- id: 16
+  neighbors: [13]
+
+scenario:
+  ticks: 1200
+  data:
+    - 16:redis_key_a=VALUE_OF_A
+  requests:
+    - 3:redis_key_a@220
+    - 4:redis_key_a@900

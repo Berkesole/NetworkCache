@@ -1,0 +1,62 @@
+{
+  "evidence_status": "HORIZON_PENDING",
+  "formal_post_batches": null,
+  "methods": [
+    "nc",
+    "tcp-direct"
+  ],
+  "network": {
+    "dci_egress_delay_ms_each_side": 2,
+    "experiment_mtu": 1400,
+    "injected_loss_percent": 0,
+    "internal_delay_ms": 2,
+    "queue_packets": 1000,
+    "rate_mbit": 1000,
+    "wireguard_mtu": 1420
+  },
+  "repetitions": [
+    1,
+    2
+  ],
+  "seeds": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10
+  ],
+  "suite": "cross-host-federation-v1",
+  "workload": {
+    "bloom_bits": 1024,
+    "bloom_hash_count": 3,
+    "catalog_size_per_domain": 512,
+    "distribution": "zipf",
+    "global_closed_loop": true,
+    "max_hop_count": 12,
+    "post_local_control_requests_per_batch": 32,
+    "post_remote_requests_per_batch": 128,
+    "pre_batches": 8,
+    "value_size_bytes": 65536,
+    "wire_version": 3,
+    "zipf_alpha": 1.1
+  },
+  "workers": {
+    "domain-a": {
+      "border_id": 250,
+      "hosts": [1, 32],
+      "public_endpoint": "124.174.13.124:51871",
+      "ssh": "volcengine"
+    },
+    "domain-b": {
+      "border_id": 450,
+      "hosts": [33, 64],
+      "public_endpoint": "115.190.62.109:51871",
+      "ssh": "volcengine-1"
+    }
+  }
+}

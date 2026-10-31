@@ -1,0 +1,3 @@
+set -eu
+
+/shared/start-switch.sh node102 102 /shared/generated/node102.network.sh
