@@ -33,3 +33,12 @@ The included experiment code is enough to review and rerun the methodology.
 The data results themselves remain on the experiment hosts and in the
 separate paper/data workspace.
 
+## Counts
+
+The manifest describes imported source trees only. The checked-out repository
+also contains this README, the archive notes, the manifest, and the small
+import/verification tools under `inventory/`.
+
+Run `python3 inventory/verify_archive.py` from this directory to verify source
+hashes, forbidden payload paths, and the single-branch archive layout.
+
