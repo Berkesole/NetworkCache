@@ -1,0 +1,261 @@
+# Generated Kua-DC v3 zipf-light workload for kua-dc-v3-16.
+# Protocol nodes are hosts only; Kathara renderer adds pure L3 leaf/spine switches.
+# Do not edit by hand; regenerate with scripts/generate_workloads_v3.py.
+# physical: hosts=16 leaves=4 spines=4
+protocol:
+  max_hop_count: 8
+
+nodes:
+  - id: 1
+    host: 172.31.210.11
+    port: 45101
+    neighbors: [2, 3, 4, 5, 13]
+  - id: 2
+    host: 172.31.210.12
+    port: 45102
+    neighbors: [1]
+  - id: 3
+    host: 172.31.210.13
+    port: 45103
+    neighbors: [1]
+  - id: 4
+    host: 172.31.210.14
+    port: 45104
+    neighbors: [1]
+  - id: 5
+    host: 172.31.210.15
+    port: 45105
+    neighbors: [1, 6, 7, 8, 9]
+  - id: 6
+    host: 172.31.210.16
+    port: 45106
+    neighbors: [5]
+  - id: 7
+    host: 172.31.210.17
+    port: 45107
+    neighbors: [5]
+  - id: 8
+    host: 172.31.210.18
+    port: 45108
+    neighbors: [5]
+  - id: 9
+    host: 172.31.210.19
+    port: 45109
+    neighbors: [5, 10, 11, 12, 13]
+  - id: 10
+    host: 172.31.210.20
+    port: 45110
+    neighbors: [9]
+  - id: 11
+    host: 172.31.210.21
+    port: 45111
+    neighbors: [9]
+  - id: 12
+    host: 172.31.210.22
+    port: 45112
+    neighbors: [9]
+  - id: 13
+    host: 172.31.210.23
+    port: 45113
+    neighbors: [1, 9, 14, 15, 16]
+  - id: 14
+    host: 172.31.210.24
+    port: 45114
+    neighbors: [13]
+  - id: 15
+    host: 172.31.210.25
+    port: 45115
+    neighbors: [13]
+  - id: 16
+    host: 172.31.210.26
+    port: 45116
+    neighbors: [13]
+
+scenario:
+  ticks: 2600
+  data:
+    - 4:redis_key_001=VALUE_001
+    - 8:redis_key_002=VALUE_002
+    - 12:redis_key_003=VALUE_003
+    - 16:redis_key_004=VALUE_004
+    - 4:redis_key_005=VALUE_005
+    - 8:redis_key_006=VALUE_006
+    - 12:redis_key_007=VALUE_007
+    - 16:redis_key_008=VALUE_008
+    - 4:redis_key_009=VALUE_009
+    - 8:redis_key_010=VALUE_010
+    - 12:redis_key_011=VALUE_011
+    - 16:redis_key_012=VALUE_012
+    - 4:redis_key_013=VALUE_013
+    - 8:redis_key_014=VALUE_014
+    - 12:redis_key_015=VALUE_015
+    - 16:redis_key_016=VALUE_016
+    - 4:redis_key_017=VALUE_017
+    - 8:redis_key_018=VALUE_018
+    - 12:redis_key_019=VALUE_019
+    - 16:redis_key_020=VALUE_020
+    - 4:redis_key_021=VALUE_021
+    - 8:redis_key_022=VALUE_022
+    - 12:redis_key_023=VALUE_023
+    - 16:redis_key_024=VALUE_024
+    - 4:redis_key_025=VALUE_025
+    - 8:redis_key_026=VALUE_026
+    - 12:redis_key_027=VALUE_027
+    - 16:redis_key_028=VALUE_028
+    - 4:redis_key_029=VALUE_029
+    - 8:redis_key_030=VALUE_030
+    - 12:redis_key_031=VALUE_031
+    - 16:redis_key_032=VALUE_032
+    - 4:redis_key_033=VALUE_033
+    - 8:redis_key_034=VALUE_034
+    - 12:redis_key_035=VALUE_035
+    - 16:redis_key_036=VALUE_036
+    - 4:redis_key_037=VALUE_037
+    - 8:redis_key_038=VALUE_038
+    - 12:redis_key_039=VALUE_039
+    - 16:redis_key_040=VALUE_040
+    - 4:redis_key_041=VALUE_041
+    - 8:redis_key_042=VALUE_042
+    - 12:redis_key_043=VALUE_043
+    - 16:redis_key_044=VALUE_044
+    - 4:redis_key_045=VALUE_045
+    - 8:redis_key_046=VALUE_046
+    - 12:redis_key_047=VALUE_047
+    - 16:redis_key_048=VALUE_048
+    - 4:redis_key_049=VALUE_049
+    - 8:redis_key_050=VALUE_050
+    - 12:redis_key_051=VALUE_051
+    - 16:redis_key_052=VALUE_052
+    - 4:redis_key_053=VALUE_053
+    - 8:redis_key_054=VALUE_054
+    - 12:redis_key_055=VALUE_055
+    - 16:redis_key_056=VALUE_056
+    - 4:redis_key_057=VALUE_057
+    - 8:redis_key_058=VALUE_058
+    - 12:redis_key_059=VALUE_059
+    - 16:redis_key_060=VALUE_060
+    - 4:redis_key_061=VALUE_061
+    - 8:redis_key_062=VALUE_062
+    - 12:redis_key_063=VALUE_063
+    - 16:redis_key_064=VALUE_064
+  requests:
+    - 8:redis_key_001@80
+    - 7:redis_key_002@100
+    - 2:redis_key_003@120
+    - 3:redis_key_004@140
+    - 8:redis_key_005@160
+    - 1:redis_key_006@180
+    - 5:redis_key_007@200
+    - 7:redis_key_008@220
+    - 6:redis_key_009@240
+    - 6:redis_key_010@260
+    - 2:redis_key_011@280
+    - 2:redis_key_012@300
+    - 3:redis_key_013@320
+    - 2:redis_key_014@340
+    - 4:redis_key_015@360
+    - 6:redis_key_016@380
+    - 5:redis_key_017@400
+    - 5:redis_key_018@420
+    - 1:redis_key_019@440
+    - 8:redis_key_020@460
+    - 3:redis_key_021@480
+    - 1:redis_key_022@500
+    - 3:redis_key_023@520
+    - 2:redis_key_024@540
+    - 6:redis_key_025@560
+    - 1:redis_key_026@580
+    - 1:redis_key_027@600
+    - 1:redis_key_028@620
+    - 5:redis_key_029@640
+    - 3:redis_key_030@660
+    - 1:redis_key_031@680
+    - 6:redis_key_032@700
+    - 3:redis_key_033@720
+    - 5:redis_key_034@740
+    - 1:redis_key_035@760
+    - 6:redis_key_036@780
+    - 3:redis_key_037@800
+    - 2:redis_key_038@820
+    - 5:redis_key_039@840
+    - 2:redis_key_040@860
+    - 3:redis_key_041@880
+    - 5:redis_key_042@900
+    - 6:redis_key_043@920
+    - 1:redis_key_044@940
+    - 6:redis_key_045@960
+    - 7:redis_key_046@980
+    - 4:redis_key_047@1000
+    - 8:redis_key_048@1020
+    - 8:redis_key_049@1040
+    - 6:redis_key_050@1060
+    - 2:redis_key_051@1080
+    - 5:redis_key_052@1100
+    - 3:redis_key_053@1120
+    - 4:redis_key_054@1140
+    - 8:redis_key_055@1160
+    - 3:redis_key_056@1180
+    - 8:redis_key_057@1200
+    - 5:redis_key_058@1220
+    - 1:redis_key_059@1240
+    - 8:redis_key_060@1260
+    - 2:redis_key_001@1340
+    - 6:redis_key_002@1360
+    - 8:redis_key_003@1380
+    - 7:redis_key_004@1400
+    - 7:redis_key_001@1420
+    - 2:redis_key_002@1440
+    - 1:redis_key_003@1460
+    - 6:redis_key_005@1480
+    - 6:redis_key_001@1500
+    - 4:redis_key_002@1520
+    - 3:redis_key_003@1540
+    - 1:redis_key_004@1560
+    - 7:redis_key_061@1580
+    - 3:redis_key_001@1600
+    - 3:redis_key_002@1620
+    - 7:redis_key_005@1640
+    - 3:redis_key_006@1660
+    - 5:redis_key_001@1680
+    - 5:redis_key_002@1700
+    - 7:redis_key_007@1720
+    - 2:redis_key_008@1740
+    - 1:redis_key_001@1760
+    - 1:redis_key_002@1780
+    - 7:redis_key_003@1800
+    - 6:redis_key_062@1820
+    - 5:redis_key_001@1840
+    - 4:redis_key_002@1860
+    - 5:redis_key_004@1880
+    - 2:redis_key_005@1900
+    - 8:redis_key_001@1920
+    - 2:redis_key_006@1940
+    - 3:redis_key_007@1960
+    - 1:redis_key_008@1980
+    - 7:redis_key_001@2000
+    - 3:redis_key_009@2020
+    - 7:redis_key_010@2040
+    - 1:redis_key_063@2060
+    - 5:redis_key_001@2080
+    - 7:redis_key_011@2100
+    - 5:redis_key_012@2120
+    - 1:redis_key_013@2140
+    - 7:redis_key_001@2160
+    - 4:redis_key_014@2180
+    - 8:redis_key_015@2200
+    - 7:redis_key_016@2220
+    - 2:redis_key_001@2240
+    - 3:redis_key_017@2260
+    - 2:redis_key_018@2280
+    - 1:redis_key_064@2300
+    - 1:redis_key_001@2320
+    - 8:redis_key_019@2340
+    - 1:redis_key_020@2360
+    - 2:redis_key_021@2380
+    - 3:redis_key_001@2400
+    - 3:redis_key_022@2420
+    - 6:redis_key_023@2440
+    - 8:redis_key_024@2460
+    - 8:redis_key_025@2480
+    - 5:redis_key_026@2500
+    - 2:redis_key_027@2520

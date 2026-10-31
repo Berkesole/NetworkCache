@@ -1,0 +1,275 @@
+{
+  "schema": "finite-cache-pilot-matrix",
+  "version": 1,
+  "plan_path": "CAPACITY_SCREENING_PLAN.md",
+  "plan_sha256": "eab3c54a32acf5d16628feb6e42277f28b53df253134234be4f6252195f63381",
+  "hosts": 32,
+  "scenario_template": "kua-dc-v4-32-latency-v4-bf1024-h3-c512-iid-zipf-b65536-seed{seed:03d}",
+  "object_size": 65536,
+  "catalog_objects": 512,
+  "rate": 128,
+  "model": "poisson",
+  "arrival_seed_rule": "9172 + seed",
+  "setup_requests": 32,
+  "measurement_requests": 4096,
+  "seeds": [
+    1,
+    2,
+    3
+  ],
+  "repetitions": 1,
+  "warmup_fraction": 0.25,
+  "measurement_fraction": 0.75,
+  "screening_order_seed": "screening-order-v1",
+  "tiers": [
+    {
+      "name": "bypass",
+      "policy": "bypass",
+      "budget_bytes": 0
+    },
+    {
+      "name": "lru-0.25MiB",
+      "policy": "lru",
+      "budget_bytes": 262144
+    },
+    {
+      "name": "lru-0.5MiB",
+      "policy": "lru",
+      "budget_bytes": 524288
+    },
+    {
+      "name": "lru-1MiB",
+      "policy": "lru",
+      "budget_bytes": 1048576
+    },
+    {
+      "name": "lru-2MiB",
+      "policy": "lru",
+      "budget_bytes": 2097152
+    },
+    {
+      "name": "lru-4MiB",
+      "policy": "lru",
+      "budget_bytes": 4194304
+    },
+    {
+      "name": "lru-16MiB",
+      "policy": "lru",
+      "budget_bytes": 16777216
+    },
+    {
+      "name": "unlimited",
+      "policy": "unlimited",
+      "budget_bytes": null
+    }
+  ],
+  "order": [
+    {
+      "slot_id": "pilot-n32-zipf-r128-lru-16MiB-s001",
+      "tier": "lru-16MiB",
+      "policy": "lru",
+      "budget_bytes": 16777216,
+      "seed": 1,
+      "block": 0
+    },
+    {
+      "slot_id": "pilot-n32-zipf-r128-lru-0.25MiB-s002",
+      "tier": "lru-0.25MiB",
+      "policy": "lru",
+      "budget_bytes": 262144,
+      "seed": 2,
+      "block": 0
+    },
+    {
+      "slot_id": "pilot-n32-zipf-r128-lru-4MiB-s003",
+      "tier": "lru-4MiB",
+      "policy": "lru",
+      "budget_bytes": 4194304,
+      "seed": 3,
+      "block": 0
+    },
+    {
+      "slot_id": "pilot-n32-zipf-r128-lru-0.5MiB-s003",
+      "tier": "lru-0.5MiB",
+      "policy": "lru",
+      "budget_bytes": 524288,
+      "seed": 3,
+      "block": 0
+    },
+    {
+      "slot_id": "pilot-n32-zipf-r128-unlimited-s002",
+      "tier": "unlimited",
+      "policy": "unlimited",
+      "budget_bytes": null,
+      "seed": 2,
+      "block": 0
+    },
+    {
+      "slot_id": "pilot-n32-zipf-r128-lru-2MiB-s002",
+      "tier": "lru-2MiB",
+      "policy": "lru",
+      "budget_bytes": 2097152,
+      "seed": 2,
+      "block": 0
+    },
+    {
+      "slot_id": "pilot-n32-zipf-r128-bypass-s001",
+      "tier": "bypass",
+      "policy": "bypass",
+      "budget_bytes": 0,
+      "seed": 1,
+      "block": 0
+    },
+    {
+      "slot_id": "pilot-n32-zipf-r128-lru-1MiB-s001",
+      "tier": "lru-1MiB",
+      "policy": "lru",
+      "budget_bytes": 1048576,
+      "seed": 1,
+      "block": 0
+    },
+    {
+      "slot_id": "pilot-n32-zipf-r128-lru-0.5MiB-s001",
+      "tier": "lru-0.5MiB",
+      "policy": "lru",
+      "budget_bytes": 524288,
+      "seed": 1,
+      "block": 1
+    },
+    {
+      "slot_id": "pilot-n32-zipf-r128-lru-1MiB-s002",
+      "tier": "lru-1MiB",
+      "policy": "lru",
+      "budget_bytes": 1048576,
+      "seed": 2,
+      "block": 1
+    },
+    {
+      "slot_id": "pilot-n32-zipf-r128-lru-16MiB-s002",
+      "tier": "lru-16MiB",
+      "policy": "lru",
+      "budget_bytes": 16777216,
+      "seed": 2,
+      "block": 1
+    },
+    {
+      "slot_id": "pilot-n32-zipf-r128-bypass-s002",
+      "tier": "bypass",
+      "policy": "bypass",
+      "budget_bytes": 0,
+      "seed": 2,
+      "block": 1
+    },
+    {
+      "slot_id": "pilot-n32-zipf-r128-lru-2MiB-s003",
+      "tier": "lru-2MiB",
+      "policy": "lru",
+      "budget_bytes": 2097152,
+      "seed": 3,
+      "block": 1
+    },
+    {
+      "slot_id": "pilot-n32-zipf-r128-unlimited-s003",
+      "tier": "unlimited",
+      "policy": "unlimited",
+      "budget_bytes": null,
+      "seed": 3,
+      "block": 1
+    },
+    {
+      "slot_id": "pilot-n32-zipf-r128-lru-4MiB-s001",
+      "tier": "lru-4MiB",
+      "policy": "lru",
+      "budget_bytes": 4194304,
+      "seed": 1,
+      "block": 1
+    },
+    {
+      "slot_id": "pilot-n32-zipf-r128-lru-0.25MiB-s003",
+      "tier": "lru-0.25MiB",
+      "policy": "lru",
+      "budget_bytes": 262144,
+      "seed": 3,
+      "block": 1
+    },
+    {
+      "slot_id": "pilot-n32-zipf-r128-lru-4MiB-s002",
+      "tier": "lru-4MiB",
+      "policy": "lru",
+      "budget_bytes": 4194304,
+      "seed": 2,
+      "block": 2
+    },
+    {
+      "slot_id": "pilot-n32-zipf-r128-unlimited-s001",
+      "tier": "unlimited",
+      "policy": "unlimited",
+      "budget_bytes": null,
+      "seed": 1,
+      "block": 2
+    },
+    {
+      "slot_id": "pilot-n32-zipf-r128-lru-2MiB-s001",
+      "tier": "lru-2MiB",
+      "policy": "lru",
+      "budget_bytes": 2097152,
+      "seed": 1,
+      "block": 2
+    },
+    {
+      "slot_id": "pilot-n32-zipf-r128-lru-16MiB-s003",
+      "tier": "lru-16MiB",
+      "policy": "lru",
+      "budget_bytes": 16777216,
+      "seed": 3,
+      "block": 2
+    },
+    {
+      "slot_id": "pilot-n32-zipf-r128-bypass-s003",
+      "tier": "bypass",
+      "policy": "bypass",
+      "budget_bytes": 0,
+      "seed": 3,
+      "block": 2
+    },
+    {
+      "slot_id": "pilot-n32-zipf-r128-lru-0.5MiB-s002",
+      "tier": "lru-0.5MiB",
+      "policy": "lru",
+      "budget_bytes": 524288,
+      "seed": 2,
+      "block": 2
+    },
+    {
+      "slot_id": "pilot-n32-zipf-r128-lru-1MiB-s003",
+      "tier": "lru-1MiB",
+      "policy": "lru",
+      "budget_bytes": 1048576,
+      "seed": 3,
+      "block": 2
+    },
+    {
+      "slot_id": "pilot-n32-zipf-r128-lru-0.25MiB-s001",
+      "tier": "lru-0.25MiB",
+      "policy": "lru",
+      "budget_bytes": 262144,
+      "seed": 1,
+      "block": 2
+    }
+  ],
+  "calibration": {
+    "seed": 1,
+    "tiers": [
+      "lru-0.25MiB",
+      "unlimited"
+    ],
+    "max_runs": 4,
+    "warmup_fraction": 0.25,
+    "measurement_fraction": 0.75
+  },
+  "max_calibration_runs": 4,
+  "max_screening_slots": 24,
+  "image_id": "sha256:f418668fd2ef7e695a45db2673bdeff66a3d49f2d94ca3bbcc2409e910355d3d",
+  "image_tag": "rsync-router:concurrency-finite-cache-smoke-81c22fe9",
+  "matrix_sha256": "2814ab6217f496be0219581a17aa3a67277f6cf0b8a3cbd28d117524af2ce0c6"
+}

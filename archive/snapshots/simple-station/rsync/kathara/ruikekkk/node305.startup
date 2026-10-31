@@ -1,0 +1,3 @@
+set -eu
+
+/shared/start-switch.sh node305 305 /shared/generated/node305.network.sh

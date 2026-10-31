@@ -1,0 +1,21 @@
+# NetworkCache latency-v3 image built from pre-existing project layers.
+# This remains fully source-rebuilt, but does not depend on external Ubuntu or
+# GitHub package mirrors while a long formal matrix is running.
+ARG DEPS_IMAGE=rsync-router:phase5c-redis-default-cache
+ARG RUNTIME_IMAGE=rsync-router:phase5f-kathara-linear
+FROM ${DEPS_IMAGE} AS redis-deps
+FROM ${RUNTIME_IMAGE}
+COPY --from=redis-deps /app/build/_deps /app/build/_deps
+COPY . /app
+WORKDIR /app
+ARG ENABLE_REDIS=ON
+ARG FETCH_REDIS_DEPS=ON
+RUN cmake -S . -B build \
+      -DENABLE_REDIS=${ENABLE_REDIS} \
+      -DFETCH_REDIS_DEPS=${FETCH_REDIS_DEPS} \
+      -DFETCHCONTENT_FULLY_DISCONNECTED=ON && \
+    cmake --build build -j$(nproc)
+COPY docker/redis.conf.template /etc/redis/redis.conf.template
+COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+COPY docker/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh /app/docker/run-rsync-app.sh

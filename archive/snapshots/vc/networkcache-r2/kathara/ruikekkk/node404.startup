@@ -1,0 +1,3 @@
+set -eu
+
+/shared/start-switch.sh node404 404 /shared/generated/node404.network.sh

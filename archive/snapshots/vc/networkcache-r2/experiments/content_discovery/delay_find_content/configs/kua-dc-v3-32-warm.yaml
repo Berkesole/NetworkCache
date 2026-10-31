@@ -1,0 +1,144 @@
+# Generated Kua-DC v3 single-key workload for kua-dc-v3-32.
+# Protocol nodes are hosts only; Kathara renderer adds pure L3 leaf/spine switches.
+# Do not edit by hand; regenerate with scripts/generate_workloads_v3.py.
+# physical: hosts=32 leaves=8 spines=4
+protocol:
+  max_hop_count: 8
+
+nodes:
+  - id: 1
+    host: 172.31.160.11
+    port: 44601
+    neighbors: [2, 3, 4, 5, 29]
+  - id: 2
+    host: 172.31.160.12
+    port: 44602
+    neighbors: [1]
+  - id: 3
+    host: 172.31.160.13
+    port: 44603
+    neighbors: [1]
+  - id: 4
+    host: 172.31.160.14
+    port: 44604
+    neighbors: [1]
+  - id: 5
+    host: 172.31.160.15
+    port: 44605
+    neighbors: [1, 6, 7, 8, 9]
+  - id: 6
+    host: 172.31.160.16
+    port: 44606
+    neighbors: [5]
+  - id: 7
+    host: 172.31.160.17
+    port: 44607
+    neighbors: [5]
+  - id: 8
+    host: 172.31.160.18
+    port: 44608
+    neighbors: [5]
+  - id: 9
+    host: 172.31.160.19
+    port: 44609
+    neighbors: [5, 10, 11, 12, 13]
+  - id: 10
+    host: 172.31.160.20
+    port: 44610
+    neighbors: [9]
+  - id: 11
+    host: 172.31.160.21
+    port: 44611
+    neighbors: [9]
+  - id: 12
+    host: 172.31.160.22
+    port: 44612
+    neighbors: [9]
+  - id: 13
+    host: 172.31.160.23
+    port: 44613
+    neighbors: [9, 14, 15, 16, 17]
+  - id: 14
+    host: 172.31.160.24
+    port: 44614
+    neighbors: [13]
+  - id: 15
+    host: 172.31.160.25
+    port: 44615
+    neighbors: [13]
+  - id: 16
+    host: 172.31.160.26
+    port: 44616
+    neighbors: [13]
+  - id: 17
+    host: 172.31.160.27
+    port: 44617
+    neighbors: [13, 18, 19, 20, 21]
+  - id: 18
+    host: 172.31.160.28
+    port: 44618
+    neighbors: [17]
+  - id: 19
+    host: 172.31.160.29
+    port: 44619
+    neighbors: [17]
+  - id: 20
+    host: 172.31.160.30
+    port: 44620
+    neighbors: [17]
+  - id: 21
+    host: 172.31.160.31
+    port: 44621
+    neighbors: [17, 22, 23, 24, 25]
+  - id: 22
+    host: 172.31.160.32
+    port: 44622
+    neighbors: [21]
+  - id: 23
+    host: 172.31.160.33
+    port: 44623
+    neighbors: [21]
+  - id: 24
+    host: 172.31.160.34
+    port: 44624
+    neighbors: [21]
+  - id: 25
+    host: 172.31.160.35
+    port: 44625
+    neighbors: [21, 26, 27, 28, 29]
+  - id: 26
+    host: 172.31.160.36
+    port: 44626
+    neighbors: [25]
+  - id: 27
+    host: 172.31.160.37
+    port: 44627
+    neighbors: [25]
+  - id: 28
+    host: 172.31.160.38
+    port: 44628
+    neighbors: [25]
+  - id: 29
+    host: 172.31.160.39
+    port: 44629
+    neighbors: [1, 25, 30, 31, 32]
+  - id: 30
+    host: 172.31.160.40
+    port: 44630
+    neighbors: [29]
+  - id: 31
+    host: 172.31.160.41
+    port: 44631
+    neighbors: [29]
+  - id: 32
+    host: 172.31.160.42
+    port: 44632
+    neighbors: [29]
+
+scenario:
+  ticks: 1200
+  data:
+    - 32:redis_key_a=VALUE_OF_A
+  requests:
+    - 3:redis_key_a@220
+    - 4:redis_key_a@900

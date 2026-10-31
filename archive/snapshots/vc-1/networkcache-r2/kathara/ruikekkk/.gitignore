@@ -1,0 +1,11 @@
+/lab.conf
+/lab.dep
+/node*.startup
+/shared/active-scenario.txt
+/shared/generated/
+/shared/logs/
+/shared/oracle/
+/shared/oracle_unicast/
+/shared/ruikekkk-topology.yaml
+/shared/state/
+/shared/traces/

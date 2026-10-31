@@ -1,0 +1,3 @@
+set -eu
+
+/shared/start-switch.sh node303 303 /shared/generated/node303.network.sh

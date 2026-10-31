@@ -1,0 +1,63 @@
+{
+  "assignment_sha256": "60fa412ea5952d0a9e7dd865badef72734568da26b965d66f8af4d89392dd878",
+  "bloom_bits": 1024,
+  "bloom_hash_count": 3,
+  "campaign": "networkcache-single-host-logical-federation-long-horizon-v4",
+  "campaign_fingerprint": "96dfe1159c3cb2bde57c3de272ae835ae3188488da0cc9c06b7cc23daf0be9ab",
+  "catalog_size_per_cluster": 512,
+  "compatible_prior_nc_campaigns": [
+    {
+      "assignment_sha256": "05d1896e492d24844087a7e6e2f0c6dcb02973569859f8905680b9194f27440c",
+      "campaign_fingerprint": "c42fb25e229996f81f74f81333bf80676c9fe85425ac54c8b74420c144210192"
+    }
+  ],
+  "controller_timeout_ms": 8000,
+  "distribution": "zipf",
+  "evidence_level": "FORMAL_ON_40_OF_40_READY",
+  "execution": "global_closed_loop_one_request_in_flight",
+  "fallback_delay_ms": 1500,
+  "horizon_decision": {
+    "accepted_by_user_on": "2026-09-09",
+    "accepted_post_batches": 64,
+    "basis": "late remote latency plateau accepted; mechanism drift retained as diagnostic",
+    "last_window_local_control_ms": 53.0176727890625,
+    "last_window_remote_end_to_end_ms": 50.07429037304688,
+    "pilot_attempt": "catalog512-zipf-nc-seed001-attempt004",
+    "pilot_report_sha256": "160fd827ff76ed377db64c347e8eb4f1c764b393019210757c86e103d5fa69a0",
+    "pilot_requests": 11264,
+    "pilot_windows_sha256": "d158edc0952ab59e85b3a603c32c1bcfb4c74cd887586077c1aec456cac1b741"
+  },
+  "max_hop_count": 12,
+  "methods": [
+    "nc",
+    "tcp-direct"
+  ],
+  "post_batches": 64,
+  "pre_batches": 8,
+  "query_table_timeout_ms": 7000,
+  "repetitions": 2,
+  "requests_per_run": 11264,
+  "runtime_image_id": "sha256:bce2e56d82225efd51335a3af959ec0c0fc199782ab68281fd16f1ff16c13a74",
+  "schema_version": 1,
+  "seeds": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10
+  ],
+  "selected_runs": 40,
+  "source_manifest_sha256": "25ffc570baf248719aeff4e4f74d273392d64b12862614d47eb9547a64548feb",
+  "staged_fallback": true,
+  "suite": "federation-long-horizon-v1",
+  "validator_policy": "single-host-long-horizon-validator-v4-tcp-control-initialization",
+  "value_size_bytes": 65536,
+  "wire_version": 3,
+  "workload_manifest_sha256": "3cd9baa969d252fbb58c9945cfcc7afe7d63b89c9817389f5b83647f0a5297a5",
+  "zipf_alpha": 1.1
+}

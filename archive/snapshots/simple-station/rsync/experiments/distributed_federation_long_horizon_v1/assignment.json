@@ -1,0 +1,27 @@
+{
+  "assignment_sha256": "60fa412ea5952d0a9e7dd865badef72734568da26b965d66f8af4d89392dd878",
+  "campaign": "networkcache-single-host-logical-federation-long-horizon-v4",
+  "max_attempts_per_slot": 4,
+  "methods": [
+    "nc",
+    "tcp-direct"
+  ],
+  "queue_policy": "seed-paired-balanced-method-order",
+  "repetitions": 2,
+  "schema_version": 1,
+  "seeds": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10
+  ],
+  "selected_slots": 40,
+  "server": "simple-station",
+  "suite": "federation-long-horizon-v1"
+}

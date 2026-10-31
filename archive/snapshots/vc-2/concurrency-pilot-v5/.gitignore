@@ -1,0 +1,167 @@
+# ============================================
+# 构建产物 (Build Artifacts)
+# ============================================
+build/
+_deps/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+*.cmake
+!CMakeLists.txt
+!cmake/*.cmake
+
+# 编译产物
+*.o
+*.a
+*.so
+*.so.*
+*.dll
+*.dylib
+*.exe
+*.out
+
+# ============================================
+# 编辑器和 IDE (Editors & IDEs)
+# ============================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Vim
+*.swn
+[._]*.s[a-v][a-z]
+[._]*.sw[a-p]
+[._]s[a-rt-v][a-z]
+[._]ss[a-gi-z]
+[._]sw[a-p]
+
+# Emacs
+\#*\#
+.\#*
+
+# ============================================
+# 临时文件 (Temporary Files)
+# ============================================
+*.tmp
+*.temp
+*.log
+*.bak
+*.orig
+*.rej
+*.patch
+
+# ============================================
+# Redis 相关 (Redis)
+# ============================================
+dump.rdb
+appendonly.aof
+*.rdb
+*.aof
+
+# ============================================
+# Docker 相关 (Docker)
+# ============================================
+data/
+volumes/
+
+# ============================================
+# 测试和调试 (Testing & Debugging)
+# ============================================
+*.test
+test_output/
+coverage/
+*.gcda
+*.gcno
+*.gcov
+
+# Valgrind
+vgcore.*
+*.memcheck
+
+# GDB
+.gdb_history
+
+# ============================================
+# 文档和笔记 (Documentation & Notes)
+# ============================================
+.claude/
+.ace-tool/
+.my_docs/
+CLAUDE.md
+**/CLAUDE.md
+plan*.txt
+teacher-questions-*.md
+docs/drawio*
+plan.md
+
+# ============================================
+# 版本控制 (Version Control)
+# ============================================
+.github/
+
+# ============================================
+# 操作系统 (Operating System)
+# ============================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Linux
+.directory
+.Trash-*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ============================================
+# 依赖和包管理 (Dependencies & Packages)
+# ============================================
+node_modules/
+.npm
+.yarn/
+package-lock.json
+yarn.lock
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+venv/
+env/
+ENV/
+
+# ============================================
+# 缓存 (Cache)
+# ============================================
+.cache/
+*.cache
+
+# ============================================
+# 其他 (Miscellaneous)
+# ============================================
+# Core dumps
+core
+core.*
+
+# 环境变量文件
+.env
+.env.local
+.env.*.local
+
+# 密钥和证书
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+secrets/

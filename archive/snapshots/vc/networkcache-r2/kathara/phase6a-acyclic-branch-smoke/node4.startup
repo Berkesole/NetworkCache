@@ -1,0 +1,8 @@
+set -eu
+
+app_mode="normal"
+if [ -f /shared/disable-node4-app ]; then
+  app_mode="disabled"
+fi
+
+/shared/start-node.sh node4 4 10.50.0.4 "" "" "${app_mode}"

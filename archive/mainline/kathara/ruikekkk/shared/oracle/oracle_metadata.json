@@ -1,0 +1,19 @@
+{
+  "host_count": 32,
+  "key_count": 64,
+  "loop_sleep_ms": 1,
+  "loopback_prefix": "10.90.0",
+  "measurement_count": 48,
+  "metadata_loop_sleep_ms": 25,
+  "oracle_port_base": 47000,
+  "phase_policy": "warmup=16 requests ticks 80..1580; measurement=48 requests ticks 1980..6820",
+  "provider_count": 8,
+  "request_count": 64,
+  "requester_count": 16,
+  "scenario": "kua-dc-v3-32-zipf-distanceblock-s2500-seed001",
+  "scenario_ticks": 7220,
+  "seed": 1,
+  "topology": "kua-dc-v3-32",
+  "workload_id": "kua-dc-v3-zipf-distanceblock-s2500",
+  "workload_type": "zipf-distanceblock"
+}

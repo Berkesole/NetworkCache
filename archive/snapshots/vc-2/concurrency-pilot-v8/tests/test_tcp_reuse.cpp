@@ -1,0 +1,72 @@
+#include "network/tcp_network.hpp"
+#include "network/packet_codec.hpp"
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
+#include <cassert>
+#include <chrono>
+#include <thread>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <iostream>
+
+struct TcpNetworkTestAccess {
+ static uint16_t start(TcpNetwork& n, uint16_t port=0) {
+  assert(n.open_listener({"127.0.0.1",port},"test"));
+  sockaddr_in a{};socklen_t len=sizeof(a);assert(getsockname(n.listener_fd_,reinterpret_cast<sockaddr*>(&a),&len)==0);
+  n.configured_=true;n.start_io_thread();return ntohs(a.sin_port);
+ }
+ static void peer(TcpNetwork& n,uint32_t id,uint16_t port) {
+  std::lock_guard<std::mutex> lock(n.mutex_);n.endpoints_[id]={"127.0.0.1",port};
+ }
+ static size_t connects(TcpNetwork& n){return n.connection_attempts_.load();}
+ static size_t reuses(TcpNetwork& n){return n.connection_reuses_.load();}
+ static void stop(TcpNetwork& n){n.close_runtime();assert(n.idle_outbound_.empty());assert(!n.has_pending_io());}
+ static void error_no_replay() {
+  TcpNetwork n(1,true);int fds[2];assert(socketpair(AF_UNIX,SOCK_STREAM,0,fds)==0);close(fds[1]);
+  TcpNetwork::OutboundFrame f;f.destination=2;f.fd=fds[0];f.bytes={1,2,3,4};f.offset=1;
+  n.outbound_peers_[2].push_back(std::move(f));n.outbound_count_=1;n.pump_outbound();
+  assert(n.connection_errors_==1 && !n.has_pending_io() && n.idle_outbound_.empty());
+  n.pump_outbound();assert(n.connection_attempts_==0); // No implicit replay after partial failure.
+ }
+ static void fragmented_and_coalesced() {
+  TcpNetwork n(1);TcpNetwork::InboundConnection c;RequestPacket p;p.request_id=99;
+  auto b=PacketCodec::encode(p);std::vector<uint8_t> frame={uint8_t(b.size()>>24),uint8_t(b.size()>>16),uint8_t(b.size()>>8),uint8_t(b.size())};
+  frame.insert(frame.end(),b.begin(),b.end());c.buffer.assign(frame.begin(),frame.begin()+2);n.extract_frames(c);assert(!n.receive());
+  c.buffer.insert(c.buffer.end(),frame.begin()+2,frame.end());c.buffer.insert(c.buffer.end(),frame.begin(),frame.end());n.extract_frames(c);
+  assert(n.receive()->request_id==99);assert(n.receive()->request_id==99);assert(!n.receive());assert(c.buffer.empty());
+ }
+};
+static auto deadline(){return std::chrono::steady_clock::now()+std::chrono::seconds(10);}
+static void send(TcpNetwork& n,uint64_t id,uint32_t dest) {
+ auto p=std::make_unique<DataPacket>();p->request_id=id;p->src_node_id=1;p->key="same-key";
+ p->value=Value(std::vector<uint8_t>(65536,uint8_t(id)));n.send_direct(dest,std::move(p));
+}
+static void receive(TcpNetwork& n,uint64_t begin,uint64_t end) {
+ auto until=deadline();auto id=begin;
+ while(id<end && std::chrono::steady_clock::now()<until) {
+  n.begin_receive_batch();while(auto p=n.receive()) {
+   assert(p->request_id==id++);auto* d=dynamic_cast<DataPacket*>(p.get());assert(d && d->key=="same-key");
+   assert(d->value.data()==std::vector<uint8_t>(65536,uint8_t(p->request_id)));
+  }
+  std::this_thread::sleep_for(std::chrono::milliseconds(1));
+ }
+ assert(id==end);n.begin_receive_batch();assert(!n.receive());
+}
+static void mode(bool reuse) {
+ TcpNetwork a(1,reuse),b(2),c(3);auto port=TcpNetworkTestAccess::start(b);auto portc=TcpNetworkTestAccess::start(c);
+ TcpNetworkTestAccess::peer(a,2,port);TcpNetworkTestAccess::peer(a,3,portc);TcpNetworkTestAccess::start(a);
+ for(uint64_t i=1;i<=32;++i){send(a,i,2);send(a,i,3);}receive(b,1,33);receive(c,1,33);
+ assert(TcpNetworkTestAccess::connects(a)==(reuse?2:64));
+ assert(TcpNetworkTestAccess::reuses(a)==(reuse?62:0));
+ auto until=deadline();while(a.has_pending_io()&&std::chrono::steady_clock::now()<until)std::this_thread::sleep_for(std::chrono::milliseconds(1));
+ assert(!a.has_pending_io()); // Idle persistent sockets must not block quiescence.
+ if(reuse) {
+  // Receiver closes idle stream; next request reconnects before any new bytes.
+  TcpNetworkTestAccess::stop(b);TcpNetworkTestAccess::start(b,port);std::this_thread::sleep_for(std::chrono::milliseconds(30));
+  send(a,33,2);receive(b,33,34);assert(TcpNetworkTestAccess::connects(a)==3);
+ }
+ TcpNetworkTestAccess::stop(a);TcpNetworkTestAccess::stop(b);TcpNetworkTestAccess::stop(c);
+}
+int main(){TcpNetworkTestAccess::fragmented_and_coalesced();TcpNetworkTestAccess::error_no_replay();mode(false);mode(true);std::cout<<"TCP reuse tests passed\n";}

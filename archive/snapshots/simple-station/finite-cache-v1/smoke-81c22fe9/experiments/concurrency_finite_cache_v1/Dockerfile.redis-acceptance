@@ -1,0 +1,48 @@
+# Dedicated build/acceptance image for the concurrency-finite-cache-v1
+# experiment. It reproduces the existing single-container layout (Redis +
+# router) but forces the Redis cache path ON and FAILS the build if CMake
+# silently downgrades to Redis OFF.
+#
+# Build context must be the experiment root, so that `source/` is the exact
+# deployed checkout:
+#   docker build -f <this file> -t rsync-router:concurrency-finite-cache-v1 .
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV REDIS_SOCKET_PATH=/run/redis/redis.sock
+ENV RSYNC_APP_TARGET=rsync-node-dev
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        cmake \
+        git \
+        ca-certificates \
+        pkg-config \
+        redis-server \
+        supervisor \
+        iproute2 \
+        python3 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY source/ /app
+
+# Build with Redis ON and fetch hiredis / redis-plus-plus into THIS image only.
+# The grep + object-file checks make a silent CMake downgrade a hard failure:
+# "configure succeeded" is not accepted as "Redis was built".
+RUN set -eux; \
+    cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
+        -DENABLE_REDIS=ON -DFETCH_REDIS_DEPS=ON 2>&1 | tee /tmp/cmake.log; \
+    grep -q "Redis support enabled" /tmp/cmake.log; \
+    grep -q "Redis cache contract test: enabled" /tmp/cmake.log; \
+    grep -q "Redis live acceptance driver: enabled" /tmp/cmake.log; \
+    cmake --build build -j"$(nproc)"; \
+    test -f build/CMakeFiles/rsync-node-dev.dir/src/cache/redis_cache.cpp.o; \
+    test -x build/rsync-node-dev; \
+    test -x build/test_redis_cache_contract; \
+    test -x build/test_redis_acceptance_live; \
+    chmod +x /app/experiments/concurrency_finite_cache_v1/*.sh \
+             /app/experiments/concurrency_finite_cache_v1/*.py
+
+WORKDIR /app
+CMD ["/bin/bash"]

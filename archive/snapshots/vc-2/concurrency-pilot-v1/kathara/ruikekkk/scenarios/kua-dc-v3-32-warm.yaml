@@ -1,0 +1,80 @@
+# Generated Kua-DC v3 single-key workload for kua-dc-v3-32.
+# Protocol nodes are hosts only; Kathara renderer adds pure L3 leaf/spine switches.
+# Do not edit by hand; regenerate with scripts/generate_workloads_v3.py.
+# physical: hosts=32 leaves=8 spines=4
+protocol:
+  max_hop_count: 8
+
+nodes:
+- id: 1
+  neighbors: [2, 3, 4, 5, 29]
+- id: 2
+  neighbors: [1]
+- id: 3
+  neighbors: [1]
+- id: 4
+  neighbors: [1]
+- id: 5
+  neighbors: [1, 6, 7, 8, 9]
+- id: 6
+  neighbors: [5]
+- id: 7
+  neighbors: [5]
+- id: 8
+  neighbors: [5]
+- id: 9
+  neighbors: [5, 10, 11, 12, 13]
+- id: 10
+  neighbors: [9]
+- id: 11
+  neighbors: [9]
+- id: 12
+  neighbors: [9]
+- id: 13
+  neighbors: [9, 14, 15, 16, 17]
+- id: 14
+  neighbors: [13]
+- id: 15
+  neighbors: [13]
+- id: 16
+  neighbors: [13]
+- id: 17
+  neighbors: [13, 18, 19, 20, 21]
+- id: 18
+  neighbors: [17]
+- id: 19
+  neighbors: [17]
+- id: 20
+  neighbors: [17]
+- id: 21
+  neighbors: [17, 22, 23, 24, 25]
+- id: 22
+  neighbors: [21]
+- id: 23
+  neighbors: [21]
+- id: 24
+  neighbors: [21]
+- id: 25
+  neighbors: [21, 26, 27, 28, 29]
+- id: 26
+  neighbors: [25]
+- id: 27
+  neighbors: [25]
+- id: 28
+  neighbors: [25]
+- id: 29
+  neighbors: [1, 25, 30, 31, 32]
+- id: 30
+  neighbors: [29]
+- id: 31
+  neighbors: [29]
+- id: 32
+  neighbors: [29]
+
+scenario:
+  ticks: 1200
+  data:
+    - 32:redis_key_a=VALUE_OF_A
+  requests:
+    - 3:redis_key_a@220
+    - 4:redis_key_a@900

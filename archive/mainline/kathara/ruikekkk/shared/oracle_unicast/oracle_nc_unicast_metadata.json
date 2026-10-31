@@ -1,0 +1,16 @@
+{
+  "baseline": "oracle-nc-unicast",
+  "host_count": 32,
+  "key_count": 80,
+  "measurement_count": 240,
+  "phase_policy": "background_warmup=16; measurement=240; spacing_ms=250",
+  "provider_count": 8,
+  "request_count": 256,
+  "requester_count": 32,
+  "scenario": "kua-dc-v3-32-latency-v2-iid-zipf-a110-s250-seed005",
+  "scenario_ticks": 2700,
+  "seed": 5,
+  "topology": "kua-dc-v3-32",
+  "workload_id": "latency-v2-iid-zipf-s250",
+  "workload_type": "latency-v2-iid-zipf"
+}

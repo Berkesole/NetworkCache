@@ -1,0 +1,7 @@
+# Offline delta image for Cross-host Physical Federation v1.
+# The base is the exact completed R2 runtime; only the activation adapter is
+# rebuilt. NetworkCache protocol, Bloom, QueryTable and cache semantics remain
+# those of the frozen base image.
+FROM rsync-router:ruikekkk-kathara
+COPY app/rsync_node_main.cpp /app/app/rsync_node_main.cpp
+RUN cmake --build /app/build --target rsync-node-dev -- -j2

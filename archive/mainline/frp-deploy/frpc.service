@@ -1,0 +1,17 @@
+[Unit]
+Description=frp client (frpc) - expose local dsh web 3080
+Documentation=https://github.com/fatedier/frp
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Restart=always
+RestartSec=3
+ExecStartPre=/opt/frp/frpc verify -c /etc/frp/frpc.toml
+ExecStart=/opt/frp/frpc -c /etc/frp/frpc.toml
+LimitNOFILE=1048576
+
+[Install]
+WantedBy=multi-user.target

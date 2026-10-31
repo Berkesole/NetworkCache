@@ -1,0 +1,2 @@
+set -eu
+printf 'sh-no-shebang-startup-ok\n' > /shared/node1-no-shebang-startup.ok

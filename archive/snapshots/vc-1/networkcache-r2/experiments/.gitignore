@@ -1,0 +1,5 @@
+# Generated experiment outputs. Keep small curated samples under explicit names when needed.
+content_discovery/**/results/*
+content_discovery/**/logs/*
+content_discovery/**/traces/*
+!**/.gitkeep

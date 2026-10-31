@@ -1,0 +1,8 @@
+set -eu
+
+seed_data="${RSYNC_SEED_DATA:-demo_key=DEMO_VALUE_5NODE_BRANCH}"
+if [ -f /shared/disable-seed ]; then
+  seed_data=""
+fi
+
+/shared/start-node.sh node5 5 10.50.0.5 "${seed_data}" ""

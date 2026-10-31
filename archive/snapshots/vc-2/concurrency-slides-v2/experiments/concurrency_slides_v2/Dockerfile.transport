@@ -1,0 +1,6 @@
+FROM rsync-router:concurrency-slides-v1
+COPY src/network/tcp_network.cpp /app/src/network/tcp_network.cpp
+COPY src/network/tcp_network.hpp /app/src/network/tcp_network.hpp
+COPY tests/test_tcp_reuse.cpp /app/tests/test_tcp_reuse.cpp
+WORKDIR /app
+RUN cmake --build build -j8

@@ -1,0 +1,32 @@
+# frpc 客户端配置 —— 部署在运行 dsh web 的本机
+# 由 render.sh 渲染；TOKEN 从本地 .frp_token 注入
+
+serverAddr = "124.174.41.239"
+serverPort = 8000
+
+auth.method = "token"
+auth.token = "__TOKEN__"
+
+# 控制连接走 TLS + 内容加密
+transport.tls.enable = true
+
+log.to = "/var/log/frpc.log"
+log.level = "info"
+log.maxDays = 7
+
+# 把本机 127.0.0.1:3080 (dsh web) 映射到公网 124.174.41.239:8337
+[[proxies]]
+name = "dsh-web"
+type = "tcp"
+localIP = "127.0.0.1"
+localPort = 3080
+remotePort = 8337
+transport.useEncryption = true
+transport.useCompression = false
+
+# 本地端口探活，dsh web 重启后 frpc 自动摘除/恢复该代理
+[proxies.healthCheck]
+type = "tcp"
+timeoutSeconds = 3
+maxFailed = 3
+intervalSeconds = 10
