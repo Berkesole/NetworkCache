@@ -1,3 +1,18 @@
+# 5-node ring, warm-up scenario
+# 与 ring-5-topology 同拓扑；scenario 分阶段触发 REQUEST，对比 cold / warm 路径
+#
+# Phase 1 (tick=0):  N1 请求 key_a (持有方 N3)
+#   预期：cold flood，所有节点都通过 broadcast-minus-prev-hop 转发
+#   预期路径：N1 -> {N2, N5} -> ... -> N3，DATA 沿路径反向，N1/N2/N5 等节点 cache + SyncTable 被填充
+#
+# Phase 2 (tick=8):  N4 请求 key_a
+#   预期：warm hit，N3/N5 等节点已经在 cache 中持有 key_a
+#       - N4 broadcast 到 N3 和 N5，两边都 cache hit → 直接 DATA 返回
+#       - 不再触发后续转发链；REQUEST 在 1 跳就终止
+#   预期日志：phase 2 应明显比 phase 1 少 forward 条数
+#
+# diameter = 2；TTL=6 与 ring-5-topology 一致
+
 protocol:
   max_hop_count: 6
 

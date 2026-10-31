@@ -1,3 +1,7 @@
+# Bridge-oriented 4-node acceptance topology source for the minimal 5C Redis
+# default-cache smoke. The node and neighbor wiring intentionally matches the
+# stable 5B-2 linear relay path:
+# node1 -> node2 -> node3 -> node4 -> node3 -> node2 -> node1.
 nodes:
 - id: 1
   host: 172.30.20.11

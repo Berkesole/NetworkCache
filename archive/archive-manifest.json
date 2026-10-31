@@ -683,7 +683,7 @@
       "host": "xiaoxin-ubuntu",
       "transport": "xiaoxin",
       "remote_path": "/root/zzh/rsync",
-      "target": "mainline",
+      "target": ".",
       "git": {
         "head": "1b8b9753859a837c3ae9525a8c85e787caf89975",
         "branch": "experiments/finite-cache-v1",
@@ -695,8 +695,8 @@
       },
       "code": {
         "file_count": 771,
-        "bytes": 5022868,
-        "content_sha256": "07f723a64508fa1ebd65360b1d62651e4fc174199f59d1dfafb6865dc11c326c"
+        "bytes": 5021399,
+        "content_sha256": "ea2652814694a2fb5a960f976bad551c9e2210c77ae1af5c299fa6e1381ea349"
       }
     }
   ]

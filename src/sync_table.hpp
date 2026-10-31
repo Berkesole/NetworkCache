@@ -1,8 +1,10 @@
 #pragma once
+#include <algorithm>
 #include <unordered_map>
 #include <vector>
 #include <string>
 #include <optional>
+#include <stdexcept>
 #include <chrono>
 #include "bloomfilter.hpp"
 
@@ -12,6 +14,11 @@
 // 4. Dynamic Update: Update neighbor data status through SYNC messages
 class SyncTable {
 public:
+    struct BloomOccupancy {
+        uint32_t neighbor_id;
+        size_t bits_set;
+        size_t bit_count;
+    };
     // Forwarding strategy enumeration
     enum class ForwardingStrategy {
         BEST_ROUTE,      
@@ -28,6 +35,8 @@ public:
         ForwardingStrategy default_strategy{ForwardingStrategy::BEST_ROUTE};
         bool enable_cost_tracking{true};                 // Enable cost tracking
         bool enable_prefix_match{false};                 // Enable prefix matching (future extension)
+        size_t bloom_bits{1024};
+        size_t bloom_hash_count{1};
     };
 
     // Next Hop: Core concept in FIB, represents a possible forwarding target
@@ -103,6 +112,7 @@ public:
         // Ensure neighbor exists
         if (!fib_entries_.contains(node_id)) {
             fib_entries_[node_id] = FibEntry();
+            fib_entries_[node_id].bloom_filter = BloomFilter(cfg_.bloom_bits, cfg_.bloom_hash_count);
             fib_entries_[node_id].next_hops.emplace_back(node_id, /*cost=*/1, /*priority=*/0);
         }
         // Add filename to this neighbor's Bloom Filter
@@ -113,8 +123,13 @@ public:
     
     // Update neighbor's Bloom Filter
     void updateNeighbor(uint32_t node_id, const BloomFilter& bf, uint32_t cost = 1) {
+        if (bf.getBits().size() != cfg_.bloom_bits ||
+            bf.getHashCount() != cfg_.bloom_hash_count) {
+            throw std::invalid_argument("SyncTable: incompatible Bloom parameters");
+        }
         if (!fib_entries_.contains(node_id)) {
             fib_entries_[node_id] = FibEntry();
+            fib_entries_[node_id].bloom_filter = BloomFilter(cfg_.bloom_bits, cfg_.bloom_hash_count);
             // Add direct connection next hop
             fib_entries_[node_id].next_hops.emplace_back(node_id, cost, 0);
         }
@@ -126,6 +141,7 @@ public:
     void addNeighbor(uint32_t node_id, uint32_t cost = 1, uint32_t priority = 0) {
         if (!fib_entries_.contains(node_id)) {
             fib_entries_[node_id] = FibEntry();
+            fib_entries_[node_id].bloom_filter = BloomFilter(cfg_.bloom_bits, cfg_.bloom_hash_count);
         }
         // Check if this next hop already exists
         auto& hops = fib_entries_[node_id].next_hops;
@@ -264,6 +280,22 @@ public:
     
     size_t neighborCount() const {
         return fib_entries_.size();
+    }
+
+    std::vector<BloomOccupancy> debugBloomOccupancy() const {
+        std::vector<BloomOccupancy> result;
+        result.reserve(fib_entries_.size());
+        for (const auto& [neighbor_id, entry] : fib_entries_) {
+            const auto& bits = entry.bloom_filter.getBits();
+            result.push_back({neighbor_id,
+                              static_cast<size_t>(std::count(bits.begin(), bits.end(), true)),
+                              bits.size()});
+        }
+        std::sort(result.begin(), result.end(),
+                  [](const auto& left, const auto& right) {
+                      return left.neighbor_id < right.neighbor_id;
+                  });
+        return result;
     }
     
     const Config& getConfig() const {

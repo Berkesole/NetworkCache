@@ -4,7 +4,7 @@
 
 | Directory | Host | Branch | Commit | Dirty |
 |---|---|---|---|---|
-| `mainline/` | xiaoxin-ubuntu | `experiments/finite-cache-v1` | `1b8b9753` | 75 |
+| repository root | xiaoxin-ubuntu | `experiments/finite-cache-v1` | `1b8b9753` | 75 |
 
 The 74 non-paper working-tree changes on this host are experiment/build
 artifacts. The remaining change is the `vldb/VLDB-networkcache` submodule

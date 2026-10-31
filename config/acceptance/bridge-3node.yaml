@@ -1,3 +1,6 @@
+# Bridge-oriented 3-node acceptance topology.
+# This locks the first phase-5B-1 validation to a single linear path:
+# node1 -> node2 -> node3 -> node2 -> node1.
 nodes:
 - id: 1
   host: 172.30.10.11

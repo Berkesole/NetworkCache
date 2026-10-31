@@ -1,6 +1,0 @@
-.git
-build
-cmake-build-*
-experiments/**/results
-**/__pycache__
-*.pyc

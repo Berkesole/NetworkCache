@@ -46,6 +46,9 @@ public:
     void send_direct(uint32_t dest_node_id, std::unique_ptr<Packet> pkt) override {
         if (my_context_) {
             if (all_mock_networks_.count(dest_node_id)) {
+                if (pkt) {
+                    pkt->dest_node_id = dest_node_id;
+                }
                 all_mock_networks_[dest_node_id]->my_context_->inbox.push(std::move(pkt));
             } else {
                 std::cerr << "MockNetwork (ID " << my_id_ << "): Error: Destination Node "

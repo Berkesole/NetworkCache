@@ -11,6 +11,10 @@
 class NetworkInterface {
 public:
     virtual ~NetworkInterface() = default;
+    // Event-loop boundary. Live transports must not extend this batch with
+    // packets arriving while the caller handles earlier packets.
+    virtual void begin_receive_batch() {}
+    virtual bool has_pending_io() const { return false; }
 
     // 从网络接收一个数据包
     // Receives a packet from the network

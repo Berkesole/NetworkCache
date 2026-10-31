@@ -4,8 +4,10 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 LAB_DIR="${LAB_DIR:-${ROOT_DIR}/kathara/phase5f-linear-smoke}"
 IMAGE_TAG="${IMAGE_TAG:-rsync-router:phase5f-kathara-linear}"
+ENABLE_REDIS="${ENABLE_REDIS:-ON}"
+FETCH_REDIS_DEPS="${FETCH_REDIS_DEPS:-ON}"
 BUILD_LOG="$(mktemp)"
-BUILD_ARGS=(--build-arg ENABLE_REDIS=ON --build-arg FETCH_REDIS_DEPS=ON)
+BUILD_ARGS=(--build-arg "ENABLE_REDIS=${ENABLE_REDIS}" --build-arg "FETCH_REDIS_DEPS=${FETCH_REDIS_DEPS}")
 
 cleanup() {
   rm -f "$BUILD_LOG"

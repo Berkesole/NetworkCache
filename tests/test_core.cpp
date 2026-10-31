@@ -9,12 +9,16 @@
 // 编译：cmake --build build --target test_core
 // 运行：./build/test_core
 
-#include <iostream>
+#include <algorithm>
 #include <cassert>
+#include <iostream>
 #include <stdexcept>
+#include <vector>
 #include "value.hpp"
 #include "cache/in_memory_cache.hpp"
 #include "bloomfilter.hpp"
+#include "sync_table.hpp"
+#include "union_window.hpp"
 
 // ============================================================================
 // 简单测试框架
@@ -176,6 +180,63 @@ TEST(bloomfilter_merge) {
     assert(bf1.contains("key2"));
 }
 
+TEST(bloomfilter_three_hash) {
+    BloomFilter bf(2048, 3);
+    const auto positions = bf.positions("alpha");
+    assert((positions == std::vector<size_t>{1924, 384, 790}));
+    bf.add("alpha");
+    assert(bf.contains("alpha"));
+    assert(!bf.contains("beta"));
+    assert(std::count(bf.getBits().begin(), bf.getBits().end(), true) == 3);
+
+    BloomFilter complete_neighbor(2048, 3);
+    complete_neighbor.add("alpha");
+    complete_neighbor.add("unrelated");
+    assert(complete_neighbor.containsAllSetBits(bf));
+
+    BloomFilter partial_neighbor(2048, 3);
+    auto partial_bits = partial_neighbor.getBits();
+    partial_bits[positions[0]] = true;
+    partial_bits[positions[1]] = true;
+    partial_neighbor.setBits(partial_bits);
+    assert(!partial_neighbor.containsAllSetBits(bf));
+
+    BloomFilter wrong_parameters(1024, 1);
+    wrong_parameters.add("alpha");
+    assert(!wrong_parameters.containsAllSetBits(bf));
+}
+
+TEST(bloomfilter_component_parameters) {
+    SyncTable::Config config;
+    config.bloom_bits = 2048;
+    config.bloom_hash_count = 3;
+    SyncTable table(config);
+    table.set(2, "alpha");
+    const auto neighbor = table.getNeighborBloomFilter(2);
+    assert(neighbor.has_value());
+    assert(neighbor->getBits().size() == 2048);
+    assert(neighbor->getHashCount() == 3);
+    assert(neighbor->contains("alpha"));
+
+    bool rejected = false;
+    try {
+        table.updateNeighbor(3, BloomFilter(1024, 1));
+    } catch (const std::invalid_argument&) {
+        rejected = true;
+    }
+    assert(rejected);
+
+    UnionWindow window(2048, 3);
+    BloomFilter request(2048, 3);
+    request.add("alpha");
+    window.stage(2, request, 4);
+    auto entries = window.drain();
+    assert(entries.size() == 1);
+    assert(entries[0].merged_bf.getBits().size() == 2048);
+    assert(entries[0].merged_bf.getHashCount() == 3);
+    assert(entries[0].merged_bf.contains("alpha"));
+}
+
 // ============================================================================
 // 主函数
 // ============================================================================
@@ -200,6 +261,8 @@ int main() {
     RUN_TEST(bloomfilter_basic, "基本 add/contains 操作");
     RUN_TEST(bloomfilter_batch_add, "批量添加");
     RUN_TEST(bloomfilter_merge, "合并操作");
+    RUN_TEST(bloomfilter_three_hash, "2048-bit/3-hash deterministic positions");
+    RUN_TEST(bloomfilter_component_parameters, "SyncTable/UnionWindow parameter consistency");
 
     // 总结
     std::cout << "========================================\n";

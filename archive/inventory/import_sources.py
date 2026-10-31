@@ -13,6 +13,8 @@ import subprocess
 import sys
 from typing import Any
 
+from roots import source_root
+
 
 ROOT = Path(__file__).resolve().parents[1]
 SELECTOR = Path(__file__).with_name("select_paths.py").read_bytes()
@@ -306,17 +308,35 @@ def extract(
         raise RuntimeError("local tar failed: " + tar_stderr.decode("utf-8", "replace"))
 
 
-def content_digest(target: Path) -> tuple[int, int, str]:
+def content_digest(
+    target: Path,
+    excluded_top_level: set[str] | None = None,
+) -> tuple[int, int, str]:
     entries: list[bytes] = []
     total = 0
     count = 0
     for directory, dirnames, filenames in os.walk(target):
+        if Path(directory) == target and excluded_top_level:
+            dirnames[:] = [
+                name for name in dirnames if name not in excluded_top_level
+            ]
         dirnames.sort()
         for name in sorted(filenames):
             path = Path(directory) / name
             if path.is_symlink() or not path.is_file():
                 continue
             rel = path.relative_to(target).as_posix()
+            if (
+                target == ROOT.parent
+                and "/" not in rel
+                and rel
+                in {
+                    ".gitignore",
+                    "ARCHIVE_ENTRY.md",
+                    "SHA256SUMS",
+                }
+            ):
+                continue
             digest = hashlib.sha256(path.read_bytes()).hexdigest()
             entries.append(f"{digest}  {rel}\n".encode())
             total += path.stat().st_size
@@ -333,7 +353,7 @@ def import_one(spec: dict[str, str], allow_existing: bool = False) -> dict[str, 
     paths = selected_paths(spec)
     if not paths:
         raise RuntimeError(f"selector returned no files for {spec['id']}")
-    target = ROOT / spec["target"]
+    target = source_root(ROOT, spec["target"])
     extract(spec, paths, target, allow_existing=allow_existing)
     count, total, digest = content_digest(target)
     if count != len(paths):
@@ -367,10 +387,15 @@ def refresh_manifest() -> int:
     manifest_path = ROOT / "archive-manifest.json"
     manifest = json.loads(manifest_path.read_text())
     for source in manifest["sources"]:
-        target = ROOT / source["target"]
+        target = source_root(ROOT, source["target"])
         if not target.is_dir():
             raise FileNotFoundError(target)
-        count, total, digest = content_digest(target)
+        count, total, digest = content_digest(
+            target,
+            {"archive", "release", ".git"}
+            if target == ROOT.parent
+            else None,
+        )
         source["code"] = {
             "file_count": count,
             "bytes": total,

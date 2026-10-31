@@ -1,3 +1,13 @@
+# 3 节点拓扑配置示例
+# 3-Node Topology Configuration Example
+#
+# 拓扑结构:
+#   Node 1 <---> Node 2 <---> Node 3
+#
+# 使用方法:
+#   auto mock_net = std::make_unique<MockNetwork>(1);
+#   mock_net->configure_topology("config/3-node-topology.yaml", 1);
+
 protocol:
   max_hop_count: 4
 

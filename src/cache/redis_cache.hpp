@@ -1,6 +1,7 @@
 #pragma once
 
 #include "cache.hpp"
+#include "redis_acceptance.hpp"
 #include <memory>
 #include <string>
 #include <sw/redis++/redis.h>
@@ -48,6 +49,13 @@ public:
     bool exists(const std::string& key) const override;
     void flush() override;
 
+    // Snapshot used by the startup acceptance check and the periodic monitor.
+    // Reads INFO (and DBSIZE) over this cache's connection, so the launcher must
+    // use a DEDICATED RedisCache instance for monitoring: it never adds a Redis
+    // query per DATA operation. Compiled and exercised only when Redis
+    // dependencies are available (ENABLE_REDIS=ON).
+    rsync_cache::RedisInstanceInfo readInstanceInfo(const std::string& identity);
+
 private:
     // 内部初始化方法
     void init(const std::string& socket_path);
@@ -56,4 +64,5 @@ private:
     static void validatePath(const std::string& path);
 
     std::unique_ptr<sw::redis::Redis> redis_;
+    std::string socket_path_;
 };

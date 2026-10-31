@@ -9,6 +9,9 @@ import os
 from pathlib import Path
 import sys
 
+from import_sources import content_digest
+from roots import source_root
+
 
 ROOT = Path(__file__).resolve().parents[1]
 FORBIDDEN_DIRS = {
@@ -67,11 +70,16 @@ def main() -> int:
     manifest = json.loads((ROOT / "archive-manifest.json").read_text())
     failures = []
     for source in manifest["sources"]:
-        target = ROOT / source["target"]
+        target = source_root(ROOT, source["target"])
         if not target.is_dir():
             failures.append(f"missing source directory: {source['target']}")
             continue
-        count, total, digest = digest_tree(target)
+        count, total, digest = content_digest(
+            target,
+            {"archive", "release", ".git"}
+            if target == ROOT.parent
+            else None,
+        )
         expected = source["code"]
         if count != expected["file_count"] or total != expected["bytes"]:
             failures.append(f"size/count drift: {source['id']}")
@@ -88,6 +96,8 @@ def main() -> int:
             continue
         if path.name == ".git":
             nested_git.append(str(rel))
+            continue
+        if rel.parts and rel.parts[0] == "release":
             continue
         if any(part in FORBIDDEN_DIRS for part in rel.parts):
             forbidden.append(str(rel))

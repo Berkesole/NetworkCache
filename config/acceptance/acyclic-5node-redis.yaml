@@ -1,3 +1,9 @@
+# Acyclic 5-node acceptance topology source for the first minimal 5E smoke.
+# Required success chain:
+# node1 -> node2 -> node3 -> node5 -> node3 -> node2 -> node1.
+# Non-target branch:
+# node2 -> node4, where node4 is a dead-end leaf that must not create loops
+# or fake success.
 nodes:
 - id: 1
   host: 172.31.22.11

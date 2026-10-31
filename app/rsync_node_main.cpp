@@ -1,15 +1,21 @@
 #include "node.hpp"
 #include "cache/in_memory_cache.hpp"
+#include "cache/node_cache.hpp"
+#include "event_trace.hpp"
+#include "experiment_data.hpp"
+#include "probe_control.hpp"
 #ifdef ENABLE_REDIS_CACHE
 #include "cache/redis_cache.hpp"
 #endif
 #include "network/mock_network.hpp"
+#include "network/packet_codec.hpp"
 #include "network/tcp_network.hpp"
 #include "network/topology_parser.hpp"
 
 #include <algorithm>
 #include <chrono>
 #include <cctype>
+#include <csignal>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -24,12 +30,25 @@
 #include <thread>
 #include <utility>
 #include <vector>
+#include <unordered_set>
+#include <unistd.h>
 
 namespace {
 
 enum class TransportMode {
     Mock,
     Tcp,
+};
+
+struct ScheduledRequestEvent {
+    uint32_t at_tick = 0;
+    std::vector<std::string> keys;
+};
+
+struct ScheduledOracleUnicastEvent {
+    uint32_t at_tick = 0;
+    std::string key;
+    uint32_t provider_node_id = 0;
 };
 
 struct NodeDevConfig {
@@ -40,8 +59,35 @@ struct NodeDevConfig {
     int loop_sleep_ms = 100;
     std::vector<std::pair<std::string, std::string>> seed_data;
     std::vector<std::string> request_keys;
+    std::vector<ScheduledRequestEvent> scenario_requests;
+    std::vector<ScheduledOracleUnicastEvent> oracle_unicast_requests;
+    ProtocolConfig protocol;
+    std::string oracle_unicast_schedule_path;
     std::optional<TcpEndpoint> tcp_self_endpoint;
     std::map<uint32_t, TcpEndpoint> tcp_peer_endpoints;
+    bool loop_iterations_overridden = false;
+    bool loop_sleep_ms_overridden = false;
+    bool seed_data_overridden = false;
+    bool request_keys_overridden = false;
+    std::string experiment_data_file;
+    std::string experiment_control_dir;
+    std::string experiment_schedule_hash;
+    std::string federation_interface;
+};
+
+struct ExperimentDataSpec {
+    std::string key;
+    uint64_t size = 0;
+    uint64_t seed = 0;
+    std::string expected_hash;
+};
+
+struct ActiveExperimentRequest {
+    std::string request_index;
+    std::string key;
+    uint64_t expected_size = 0;
+    std::string expected_hash;
+    uint64_t started_ns = 0;
 };
 
 std::string trim_copy(const std::string& value) {
@@ -68,6 +114,11 @@ std::optional<std::string> read_env(const char* name) {
     return std::string(value);
 }
 
+bool env_enabled(const char* name) {
+    const auto value = read_env(name);
+    return value.has_value() && *value != "0" && *value != "false" && *value != "FALSE";
+}
+
 bool parse_uint32_value(const std::string& text, uint32_t& out_value) {
     try {
         size_t consumed = 0;
@@ -77,6 +128,18 @@ bool parse_uint32_value(const std::string& text, uint32_t& out_value) {
             return false;
         }
         out_value = static_cast<uint32_t>(parsed);
+        return true;
+    } catch (const std::exception&) {
+        return false;
+    }
+}
+
+bool parse_uint64_value(const std::string& text, uint64_t& out_value) {
+    try {
+        size_t consumed = 0;
+        const unsigned long long parsed = std::stoull(text, &consumed, 10);
+        if (consumed != text.size()) return false;
+        out_value = static_cast<uint64_t>(parsed);
         return true;
     } catch (const std::exception&) {
         return false;
@@ -151,6 +214,16 @@ std::vector<std::string> parse_csv_list(const std::string& value) {
         }
     }
 
+    return items;
+}
+
+std::vector<std::string> split_tab_line(const std::string& value) {
+    std::vector<std::string> items;
+    std::stringstream stream(value);
+    std::string item;
+    while (std::getline(stream, item, '\t')) {
+        items.push_back(trim_copy(item));
+    }
     return items;
 }
 
@@ -258,6 +331,7 @@ bool apply_env_overrides(NodeDevConfig& config, std::string& error) {
             error = "RSYNC_LOOP_ITERATIONS must be a non-negative integer";
             return false;
         }
+        config.loop_iterations_overridden = true;
     }
 
     if (const auto value = read_env("RSYNC_LOOP_SLEEP_MS")) {
@@ -266,6 +340,7 @@ bool apply_env_overrides(NodeDevConfig& config, std::string& error) {
             error = "RSYNC_LOOP_SLEEP_MS must be a non-negative integer";
             return false;
         }
+        config.loop_sleep_ms_overridden = true;
     }
 
     if (const auto value = read_env("RSYNC_SEED_DATA")) {
@@ -273,10 +348,36 @@ bool apply_env_overrides(NodeDevConfig& config, std::string& error) {
         if (!error.empty()) {
             return false;
         }
+        config.seed_data_overridden = true;
     }
 
     if (const auto value = read_env("RSYNC_REQUEST_KEYS")) {
         config.request_keys = parse_csv_list(*value);
+        config.request_keys_overridden = true;
+    }
+
+    if (const auto value = read_env("RSYNC_ORACLE_UNICAST_SCHEDULE")) {
+        config.oracle_unicast_schedule_path = *value;
+    }
+    if (const auto value = read_env("RSYNC_EXPERIMENT_DATA_FILE")) {
+        config.experiment_data_file = *value;
+        config.seed_data_overridden = true;
+    }
+    if (const auto value = read_env("RSYNC_EXPERIMENT_CONTROL_DIR")) {
+        config.experiment_control_dir = *value;
+        config.scenario_requests.clear();
+        config.request_keys_overridden = true;
+    }
+    if (const auto value = read_env("RSYNC_EXPERIMENT_SCHEDULE_HASH")) {
+        config.experiment_schedule_hash = *value;
+    }
+    if (const auto value = read_env("RSYNC_FEDERATION_INTERFACE")) {
+        if (value->size() < 4 || value->substr(0, 3) != "eth" ||
+            !std::all_of(value->begin() + 3, value->end(), [](unsigned char c) { return std::isdigit(c); })) {
+            error = "RSYNC_FEDERATION_INTERFACE must have eth<index> form";
+            return false;
+        }
+        config.federation_interface = *value;
     }
 
     if (const auto value = read_env("RSYNC_TCP_SELF")) {
@@ -370,6 +471,7 @@ bool parse_args(int argc, char** argv, NodeDevConfig& config, bool& show_help,
                 error = "--iterations must be a non-negative integer";
                 return false;
             }
+            config.loop_iterations_overridden = true;
             continue;
         }
         if (arg == "--sleep-ms") {
@@ -382,6 +484,7 @@ bool parse_args(int argc, char** argv, NodeDevConfig& config, bool& show_help,
                 error = "--sleep-ms must be a non-negative integer";
                 return false;
             }
+            config.loop_sleep_ms_overridden = true;
             continue;
         }
         if (arg == "--seed") {
@@ -393,6 +496,7 @@ bool parse_args(int argc, char** argv, NodeDevConfig& config, bool& show_help,
             if (!error.empty()) {
                 return false;
             }
+            config.seed_data_overridden = true;
             continue;
         }
         if (arg == "--request-keys") {
@@ -401,6 +505,7 @@ bool parse_args(int argc, char** argv, NodeDevConfig& config, bool& show_help,
                 return false;
             }
             config.request_keys = parse_csv_list(*value);
+            config.request_keys_overridden = true;
             continue;
         }
         if (arg == "--tcp-self") {
@@ -438,9 +543,9 @@ bool parse_args(int argc, char** argv, NodeDevConfig& config, bool& show_help,
     return true;
 }
 
-bool load_topology(const std::string& path,
-                   std::map<uint32_t, ParsedNodeConfig>& topology,
-                   std::string& error) {
+bool load_parse_result(const std::string& path,
+                       ParseResult& result,
+                       std::string& error) {
     std::ifstream file(path);
     if (!file.is_open()) {
         error = "Unable to open topology config: " + path;
@@ -451,8 +556,8 @@ bool load_topology(const std::string& path,
     buffer << file.rdbuf();
 
     TopologyParser parser;
-    topology = parser.parse(buffer.str());
-    if (topology.empty()) {
+    result = parser.parse_config(buffer.str());
+    if (result.topology.empty()) {
         if (parser.has_errors()) {
             error = "Topology config is malformed and produced no nodes: " + path;
         } else {
@@ -463,7 +568,112 @@ bool load_topology(const std::string& path,
     return true;
 }
 
-bool validate_config(const NodeDevConfig& config, std::string& error) {
+bool load_oracle_unicast_schedule(NodeDevConfig& config,
+                                  const ParseResult& parsed,
+                                  std::string& error) {
+    config.oracle_unicast_requests.clear();
+    if (config.oracle_unicast_schedule_path.empty()) {
+        return true;
+    }
+    config.scenario_requests.clear();
+
+    std::ifstream file(config.oracle_unicast_schedule_path);
+    if (!file.is_open()) {
+        error = "Unable to open oracle unicast schedule: " +
+                config.oracle_unicast_schedule_path;
+        return false;
+    }
+
+    std::string line;
+    uint32_t line_number = 0;
+    while (std::getline(file, line)) {
+        ++line_number;
+        line = trim_copy(line);
+        if (line.empty()) {
+            continue;
+        }
+        const auto fields = split_tab_line(line);
+        if (!fields.empty() && fields[0] == "tick") {
+            continue;
+        }
+        if (fields.size() < 3) {
+            error = "Oracle unicast schedule line " + std::to_string(line_number) +
+                    " must contain at least tick, key, provider";
+            return false;
+        }
+
+        uint32_t tick = 0;
+        uint32_t provider = 0;
+        if (!parse_uint32_value(fields[0], tick)) {
+            error = "Oracle unicast schedule line " + std::to_string(line_number) +
+                    " has invalid tick: " + fields[0];
+            return false;
+        }
+        if (fields[1].empty()) {
+            error = "Oracle unicast schedule line " + std::to_string(line_number) +
+                    " has empty key";
+            return false;
+        }
+        if (!parse_uint32_value(fields[2], provider) || provider == 0) {
+            error = "Oracle unicast schedule line " + std::to_string(line_number) +
+                    " has invalid provider: " + fields[2];
+            return false;
+        }
+        if (parsed.topology.count(provider) == 0) {
+            error = "Oracle unicast schedule line " + std::to_string(line_number) +
+                    " references unknown provider Node " + std::to_string(provider);
+            return false;
+        }
+
+        config.oracle_unicast_requests.push_back(
+            ScheduledOracleUnicastEvent{tick, fields[1], provider});
+    }
+
+    std::stable_sort(config.oracle_unicast_requests.begin(),
+                     config.oracle_unicast_requests.end(),
+                     [](const ScheduledOracleUnicastEvent& lhs,
+                        const ScheduledOracleUnicastEvent& rhs) {
+                         return lhs.at_tick < rhs.at_tick;
+                     });
+    return true;
+}
+
+void apply_scenario_defaults(NodeDevConfig& config, const ParseResult& parsed) {
+    config.protocol = parsed.protocol;
+
+    if (!config.loop_iterations_overridden) {
+        config.loop_iterations = static_cast<int>(parsed.scenario.ticks);
+    }
+
+    if (!config.seed_data_overridden) {
+        config.seed_data.clear();
+        for (const auto& item : parsed.scenario.data) {
+            if (item.node_id == config.node_id) {
+                config.seed_data.emplace_back(item.key, item.value);
+            }
+        }
+    }
+
+    if (!config.request_keys_overridden) {
+        config.scenario_requests.clear();
+        for (const auto& item : parsed.scenario.requests) {
+            if (item.node_id == config.node_id) {
+                config.scenario_requests.push_back(
+                    ScheduledRequestEvent{item.at_tick, item.keys});
+            }
+        }
+        std::stable_sort(config.scenario_requests.begin(),
+                         config.scenario_requests.end(),
+                         [](const ScheduledRequestEvent& lhs,
+                            const ScheduledRequestEvent& rhs) {
+                             return lhs.at_tick < rhs.at_tick;
+                         });
+    }
+}
+
+bool validate_config(NodeDevConfig& config,
+                     ParseResult& parsed,
+                     std::string& error) {
     if (config.node_id == 0) {
         error = "Node ID must be greater than zero";
         return false;
@@ -480,20 +690,44 @@ bool validate_config(const NodeDevConfig& config, std::string& error) {
         return false;
     }
 
-    std::map<uint32_t, ParsedNodeConfig> topology;
-    if (!load_topology(config.topology_path, topology, error)) {
+    if (!load_parse_result(config.topology_path, parsed, error)) {
         return false;
     }
 
-    if (topology.count(config.node_id) == 0) {
+    if (parsed.topology.count(config.node_id) == 0) {
         error = "Node ID " + std::to_string(config.node_id) +
                 " is not present in topology file: " + config.topology_path;
         return false;
     }
 
+    if (!config.loop_iterations_overridden &&
+        parsed.scenario.ticks >
+            static_cast<uint32_t>(std::numeric_limits<int>::max())) {
+        error = "Scenario ticks exceed supported loop_iterations range";
+        return false;
+    }
+
+    for (const auto& item : parsed.scenario.data) {
+        if (parsed.topology.count(item.node_id) == 0) {
+            error = "Scenario data references unknown node ID " +
+                    std::to_string(item.node_id) + " in topology file: " +
+                    config.topology_path;
+            return false;
+        }
+    }
+
+    for (const auto& item : parsed.scenario.requests) {
+        if (parsed.topology.count(item.node_id) == 0) {
+            error = "Scenario request references unknown node ID " +
+                    std::to_string(item.node_id) + " in topology file: " +
+                    config.topology_path;
+            return false;
+        }
+    }
+
     if (config.transport == TransportMode::Tcp) {
         for (const auto& [peer_node_id, _] : config.tcp_peer_endpoints) {
-            if (topology.count(peer_node_id) == 0) {
+            if (parsed.topology.count(peer_node_id) == 0) {
                 error = "TCP peer override references unknown node ID " +
                         std::to_string(peer_node_id) + " in topology file: " +
                         config.topology_path;
@@ -502,6 +736,10 @@ bool validate_config(const NodeDevConfig& config, std::string& error) {
         }
     }
 
+    apply_scenario_defaults(config, parsed);
+    if (!load_oracle_unicast_schedule(config, parsed, error)) {
+        return false;
+    }
     return true;
 }
 
@@ -510,10 +748,23 @@ void print_config(const NodeDevConfig& config) {
     std::cout << "  node_id: " << config.node_id << "\n";
     std::cout << "  transport: " << transport_mode_to_string(config.transport) << "\n";
     std::cout << "  topology: " << config.topology_path << "\n";
+    std::cout << "  protocol.max_hop_count: " << config.protocol.max_hop_count << "\n";
     std::cout << "  loop_iterations: " << config.loop_iterations << "\n";
     std::cout << "  loop_sleep_ms: " << config.loop_sleep_ms << "\n";
     std::cout << "  seed_data_entries: " << config.seed_data.size() << "\n";
     std::cout << "  request_keys: " << config.request_keys.size() << "\n";
+    std::cout << "  scheduled_scenario_requests: " << config.scenario_requests.size()
+              << "\n";
+    std::cout << "  oracle_unicast_schedule: "
+              << (config.oracle_unicast_schedule_path.empty()
+                      ? std::string("<none>")
+                      : config.oracle_unicast_schedule_path)
+              << "\n";
+    std::cout << "  scheduled_oracle_unicast_requests: "
+              << config.oracle_unicast_requests.size() << "\n";
+    std::cout << "  experiment_control_dir: "
+              << (config.experiment_control_dir.empty() ? "<none>" : config.experiment_control_dir)
+              << "\n";
     if (config.transport == TransportMode::Tcp) {
         std::cout << "  tcp_endpoint_precedence: topology/config -> env/CLI overrides -> legacy default fallback\n";
         if (config.tcp_self_endpoint.has_value()) {
@@ -530,6 +781,48 @@ void print_config(const NodeDevConfig& config) {
                       << format_tcp_endpoint(endpoint) << "\n";
         }
     }
+}
+
+std::vector<ExperimentDataSpec> load_experiment_data(const std::string& path) {
+    std::vector<ExperimentDataSpec> specs;
+    if (path.empty()) return specs;
+    std::ifstream input(path);
+    if (!input.is_open()) {
+        throw std::runtime_error("unable to open experiment data file: " + path);
+    }
+    std::string line;
+    while (std::getline(input, line)) {
+        if (line.empty() || line[0] == '#') continue;
+        const auto fields = split_tab_line(line);
+        if (!fields.empty() && fields[0] == "key") continue;
+        if (fields.size() < 4) throw std::runtime_error("invalid experiment data row: " + line);
+        ExperimentDataSpec spec;
+        spec.key = fields[0];
+        if (!parse_uint64_value(fields[1], spec.size) ||
+            !parse_uint64_value(fields[2], spec.seed)) {
+            throw std::runtime_error("invalid experiment data size/seed: " + line);
+        }
+        spec.expected_hash = fields[3];
+        specs.push_back(std::move(spec));
+    }
+    return specs;
+}
+
+uint64_t steady_ns() {
+    return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count());
+}
+
+void atomic_write(const std::filesystem::path& path, const std::string& content) {
+    std::filesystem::create_directories(path.parent_path());
+    const auto temporary = path.string() + ".tmp." + std::to_string(::getpid());
+    {
+        std::ofstream output(temporary, std::ios::trunc);
+        if (!output.good()) throw std::runtime_error("unable to write " + temporary);
+        output << content;
+        output.flush();
+    }
+    std::filesystem::rename(temporary, path);
 }
 
 void print_tcp_endpoint_report(const TcpNetwork& network, uint32_t node_id) {
@@ -608,6 +901,10 @@ std::unique_ptr<LocalCache> build_cache() {
 }  // namespace
 
 int main(int argc, char** argv) {
+    // A backend going away must surface as a classified backend error (which the
+    // run loop turns into a control/fatal marker + non-zero exit), not as an
+    // unclassified SIGPIPE death.
+    std::signal(SIGPIPE, SIG_IGN);
     std::cout << std::unitbuf;
     std::cerr << std::unitbuf;
 
@@ -631,7 +928,8 @@ int main(int argc, char** argv) {
         return EXIT_SUCCESS;
     }
 
-    if (!validate_config(config, error)) {
+    ParseResult parsed;
+    if (!validate_config(config, parsed, error)) {
         std::cerr << "[rsync-node-dev] validation error: " << error << "\n";
         return EXIT_FAILURE;
     }
@@ -652,27 +950,600 @@ int main(int argc, char** argv) {
         return EXIT_FAILURE;
     }
 
-    Node node(config.node_id, std::move(network), std::move(cache));
+    Node::Config node_runtime_config;
+    node_runtime_config.max_hop_count = config.protocol.max_hop_count;
+    if (const auto value = read_env("RSYNC_QUERY_TIMEOUT_MS")) {
+        uint32_t timeout_ms = 0;
+        if (!parse_uint32_value(*value, timeout_ms) || timeout_ms == 0 || timeout_ms > 60000) {
+            std::cerr << "[rsync-node-dev] invalid RSYNC_QUERY_TIMEOUT_MS=" << *value << "\n";
+            return EXIT_FAILURE;
+        }
+        node_runtime_config.query_timeout = std::chrono::milliseconds(timeout_ms);
+    }
+    if (const auto value = read_env("RSYNC_BLOOM_BITS")) {
+        uint32_t bloom_bits = 0;
+        if (!parse_uint32_value(*value, bloom_bits) || bloom_bits < 128 ||
+            bloom_bits > 65536 || bloom_bits % 8 != 0) {
+            std::cerr << "[rsync-node-dev] invalid RSYNC_BLOOM_BITS=" << *value << "\n";
+            return EXIT_FAILURE;
+        }
+        node_runtime_config.bloom_bits = bloom_bits;
+    }
+    if (const auto value = read_env("RSYNC_BLOOM_HASH_COUNT")) {
+        uint32_t hash_count = 0;
+        if (!parse_uint32_value(*value, hash_count) ||
+            (hash_count != 1 && hash_count != 3)) {
+            std::cerr << "[rsync-node-dev] invalid RSYNC_BLOOM_HASH_COUNT=" << *value << "\n";
+            return EXIT_FAILURE;
+        }
+        node_runtime_config.bloom_hash_count = hash_count;
+    }
+    node_runtime_config.staged_fallback_enabled = env_enabled("RSYNC_STAGED_FALLBACK");
+    try {
+        node_runtime_config.cache_policy = rsync_cache::CachePolicyConfig::fromEnv();
+    } catch (const std::exception& e) {
+        std::cerr << "[rsync-node-dev] cache policy configuration error: " << e.what() << "\n";
+        return EXIT_FAILURE;
+    }
+    if (const auto value = read_env("RSYNC_FALLBACK_DELAY_MS")) {
+        uint32_t fallback_delay_ms = 0;
+        if (!parse_uint32_value(*value, fallback_delay_ms) ||
+            fallback_delay_ms == 0 || fallback_delay_ms >=
+                static_cast<uint32_t>(node_runtime_config.query_timeout.count())) {
+            std::cerr << "[rsync-node-dev] invalid RSYNC_FALLBACK_DELAY_MS="
+                      << *value << "\n";
+            return EXIT_FAILURE;
+        }
+        node_runtime_config.fallback_delay =
+            std::chrono::milliseconds(fallback_delay_ms);
+    }
+    const auto wire_version = PacketCodec::configured_wire_version();
+    if (node_runtime_config.staged_fallback_enabled &&
+        (wire_version != PacketCodec::kSignedRequestWireVersion ||
+         node_runtime_config.bloom_bits != RequestPacket::kSignatureBloomBits ||
+         node_runtime_config.bloom_hash_count != RequestPacket::kSignatureHashCount ||
+         node_runtime_config.fallback_delay >= node_runtime_config.query_timeout)) {
+        std::cerr
+            << "[rsync-node-dev] staged fallback requires wire v3, "
+            << "1024 Bloom bits, 3 hashes, and fallback delay < query timeout\n";
+        return EXIT_FAILURE;
+    }
+    std::cout << "[rsync-node-dev] bloom configuration bits="
+              << node_runtime_config.bloom_bits << " hashes="
+              << node_runtime_config.bloom_hash_count
+              << " staged_fallback="
+              << (node_runtime_config.staged_fallback_enabled ? "enabled" : "disabled")
+              << " fallback_delay_ms=" << node_runtime_config.fallback_delay.count()
+              << " query_timeout_ms=" << node_runtime_config.query_timeout.count() << "\n";
+    std::cout << "[rsync-node-dev] wire configuration version="
+              << static_cast<unsigned>(wire_version) << "\n";
+    auto* tcp_network = dynamic_cast<TcpNetwork*>(network.get());
+    Node node(config.node_id,
+              std::move(network),
+              std::move(cache),
+              node_runtime_config);
 
-    for (const auto& [key, value] : config.seed_data) {
-        node.addLocalData(key, value);
-        std::cout << "[rsync-node-dev] seeded local key=" << key
-                  << " value_size=" << value.size() << "\n";
+    // Entry-point fatal reporting is defined before seeding so an initialization
+    // fault is recorded the same way a run-time fault is.
+    const bool experiment_mode = !config.experiment_control_dir.empty();
+    const std::filesystem::path control_root(config.experiment_control_dir);
+    auto fatal_backend = [&](const char* marker, const std::string& category,
+                             const std::string& detail) {
+        std::cerr << "[rsync-node-dev] " << category << ": " << detail << "\n";
+        if (experiment_mode) {
+            atomic_write(control_root / "fatal" /
+                             ("node" + std::to_string(config.node_id) + "." + marker),
+                         category + "\t" + detail + "\n");
+        }
+        rsync_trace::flush();
+    };
+
+    try {
+        for (const auto& spec : load_experiment_data(config.experiment_data_file)) {
+            auto value = rsync_experiment::deterministic_value(
+                static_cast<std::size_t>(spec.size), spec.seed);
+            const auto actual_hash = rsync_experiment::hex64(rsync_experiment::fnv1a64(value));
+            if (actual_hash != spec.expected_hash) {
+                throw std::runtime_error("experiment seed hash mismatch for " + spec.key);
+            }
+            node.addLocalData(spec.key, value);
+            std::cout << "[rsync-node-dev] seeded experiment key=" << spec.key
+                      << " value_size=" << value.size()
+                      << " value_hash=" << actual_hash << "\n";
+        }
+    } catch (const rsync_cache::BackendIndeterminate& e) {
+        fatal_backend("backend-indeterminate", "backend_indeterminate", e.what());
+        return EXIT_FAILURE;
+    } catch (const rsync_cache::CacheUnavailable& e) {
+        fatal_backend("backend-unavailable", "cache_unavailable", e.what());
+        return EXIT_FAILURE;
+    } catch (const std::exception& e) {
+        std::cerr << "[rsync-node-dev] experiment data error: " << e.what() << "\n";
+        if (experiment_mode) {
+            atomic_write(control_root / "fatal" /
+                             ("node" + std::to_string(config.node_id) + ".runtime-error"),
+                         std::string("runtime_error\t") + e.what() + "\n");
+        }
+        rsync_trace::flush();
+        return EXIT_FAILURE;
+    }
+
+    try {
+        for (const auto& [key, value] : config.seed_data) {
+            node.addLocalData(key, value);
+            std::cout << "[rsync-node-dev] seeded local key=" << key
+                      << " value_size=" << value.size() << "\n";
+        }
+    } catch (const rsync_cache::BackendIndeterminate& e) {
+        fatal_backend("backend-indeterminate", "backend_indeterminate", e.what());
+        return EXIT_FAILURE;
+    } catch (const rsync_cache::CacheUnavailable& e) {
+        fatal_backend("backend-unavailable", "cache_unavailable", e.what());
+        return EXIT_FAILURE;
+    } catch (const std::exception& e) {
+        std::cerr << "[rsync-node-dev] seed error: " << e.what() << "\n";
+        if (experiment_mode) {
+            atomic_write(control_root / "fatal" /
+                             ("node" + std::to_string(config.node_id) + ".runtime-error"),
+                         std::string("runtime_error\t") + e.what() + "\n");
+        }
+        rsync_trace::flush();
+        return EXIT_FAILURE;
+    }
+
+    // Initialization is over: owner objects are now read-only and the replica
+    // store starts empty. LRU state lives in this process only; the launch
+    // script enforces an empty Redis DB (RSYNC_REDIS_REQUIRE_EMPTY).
+    node.cacheStore()->sealOwners();
+    node.cacheStore()->emitConfigEvent();
+    {
+        const auto& cache_policy = node.cacheStore()->config();
+        std::cout << "[rsync-node-dev] cache policy=" << cache_policy.policyName()
+                  << " budget_bytes=" << cache_policy.budget_bytes
+                  << " namespaced=" << (cache_policy.namespaced ? 1 : 0)
+                  << " owner_objects=" << node.cacheStore()->gauge().owner_objects
+                  << " gauge_interval_ms=" << cache_policy.gauge_interval_ms
+                  << " schema=" << rsync_cache::kCacheSchemaVersion << "\n";
     }
 
     if (!config.request_keys.empty()) {
+        std::cout << "[rsync-node-dev] firing explicit startup request for "
+                  << config.request_keys.size() << " key(s)\n";
         node.requestFile(config.request_keys);
     }
 
+    std::optional<ActiveExperimentRequest> active_request;
+    const bool async_mode = experiment_mode && std::filesystem::exists(control_root / "async-v2.enabled");
+    std::unordered_map<std::string, ActiveExperimentRequest> active_requests;
+    std::unordered_set<std::string> isolation_probe_ids;
+    std::unordered_set<std::string> processed_commands;
+    std::unordered_set<std::string> processed_state_markers;
+    bool activation_processed = false;
+    uint64_t last_protocol_activity_ns = steady_ns();
+    std::string active_quiesce_index;
+    std::filesystem::path active_quiesce_ack;
+    if (experiment_mode) {
+        node.setApplicationCallback([&](const Node::ApplicationDelivery& delivery) {
+            const ActiveExperimentRequest* current = nullptr;
+            if (async_mode) {
+                if (delivery.app_request_id.empty()) return; // legacy protocol notification
+                if (isolation_probe_ids.count(delivery.app_request_id)) {
+                    atomic_write(control_root / "fatal" / ("node" + std::to_string(config.node_id) + ".probe-data"), delivery.app_request_id + "\n");
+                    throw std::runtime_error("successful DATA for isolation probe");
+                }
+                const auto it = active_requests.find(delivery.app_request_id);
+                if (it == active_requests.end() || it->second.key != delivery.key)
+                    throw std::runtime_error("unknown/mismatched async application delivery");
+                current = &it->second;
+            } else {
+                if (!active_request.has_value() || delivery.key != active_request->key) return;
+                current = &*active_request;
+            }
+            const uint64_t finished_ns = steady_ns();
+            const std::string actual_hash =
+                rsync_experiment::hex64(rsync_experiment::fnv1a64(delivery.value));
+            const bool size_ok = delivery.value.size() == current->expected_size;
+            const bool hash_ok = actual_hash == current->expected_hash;
+            const std::string status = size_ok && hash_ok ? "ok" : "integrity_mismatch";
+            const auto cached_route = node.debugCachedRoute(delivery.key);
+            std::ostringstream row;
+            row << current->request_index << '\t' << config.node_id << '\t'
+                << delivery.key << '\t' << status << '\t' << delivery.value.size() << '\t'
+                << actual_hash << '\t' << current->started_ns << '\t' << finished_ns
+                << '\t' << delivery.request_id << '\t' << delivery.via << '\t'
+                << config.experiment_schedule_hash << '\t'
+                << (cached_route.has_value() ? std::to_string(*cached_route) : "")
+                << '\t' << delivery.origin_query_uid << '\n';
+            std::filesystem::create_directories(control_root / "delivery-audit");
+            { std::ofstream audit(control_root / "delivery-audit" /
+                  ("node" + std::to_string(config.node_id) + ".tsv"), std::ios::app);
+              audit << row.str(); }
+            atomic_write(control_root / "completions" /
+                             (current->request_index + ".tsv"), row.str());
+            if (async_mode) active_requests.erase(delivery.app_request_id);
+            else active_request.reset();
+        });
+        atomic_write(control_root / "ready" /
+                         ("node" + std::to_string(config.node_id) + ".ready"),
+                     "ready\t" + std::to_string(config.node_id) + "\n");
+    }
+
+    const bool trace_loop_ticks = env_enabled("RSYNC_EVENT_TRACE_LOOP_TICKS");
     for (int iteration = 0; iteration < config.loop_iterations; ++iteration) {
-        node.processOne();
+        const uint32_t tick = static_cast<uint32_t>(iteration);
+        if (experiment_mode) {
+            if (std::filesystem::exists(control_root / "stop")) break;
+            const auto state_marker_dir = control_root / "protocol-state-markers";
+            if (std::filesystem::exists(state_marker_dir)) {
+                std::vector<std::filesystem::path> markers;
+                for (const auto& entry : std::filesystem::directory_iterator(state_marker_dir)) {
+                    if (entry.is_regular_file() && entry.path().extension() == ".tsv") {
+                        markers.push_back(entry.path());
+                    }
+                }
+                std::sort(markers.begin(), markers.end());
+                for (const auto& marker : markers) {
+                    if (!processed_state_markers.insert(marker.string()).second) continue;
+                    std::ifstream input(marker);
+                    std::string line;
+                    std::getline(input, line);
+                    const auto fields = split_tab_line(line);
+                    if (fields.size() != 3) continue;
+                    std::ostringstream rows;
+                    rows << "snapshot_id\tphase\tbin\tnode\tneighbor\tbits_set\tbit_count\toccupancy\n";
+                    const auto state = node.debugSyncBloomOccupancy();
+                    if (state.empty()) {
+                        rows << fields[0] << '\t' << fields[1] << '\t' << fields[2]
+                             << '\t' << config.node_id << "\t0\t0\t"
+                             << node_runtime_config.bloom_bits << "\t0\n";
+                    } else {
+                        for (const auto& item : state) {
+                            rows << fields[0] << '\t' << fields[1] << '\t' << fields[2]
+                                 << '\t' << config.node_id << '\t' << item.neighbor_id << '\t'
+                                 << item.bits_set << '\t' << item.bit_count << '\t'
+                                 << (item.bit_count == 0 ? 0.0 :
+                                     static_cast<double>(item.bits_set) / item.bit_count) << '\n';
+                        }
+                    }
+                    atomic_write(control_root / "protocol-state" /
+                                     (marker.stem().string() + "-node" +
+                                      std::to_string(config.node_id) + ".tsv"),
+                                 rows.str());
+                }
+            }
+            const auto activation_path = control_root / "activation" /
+                ("node" + std::to_string(config.node_id) + ".tsv");
+            if (!activation_processed && std::filesystem::exists(activation_path)) {
+                activation_processed = true;
+                std::ifstream activation_input(activation_path);
+                std::string activation_line;
+                std::getline(activation_input, activation_line);
+                const auto fields = split_tab_line(activation_line);
+                std::string activation_status = "rejected";
+                std::string activation_error = "invalid activation command";
+                uint32_t peer_id = 0;
+                uint32_t peer_port = 0;
+                if (fields.size() == 6 && fields[5] == config.experiment_schedule_hash &&
+                    parse_uint32_value(fields[0], peer_id) &&
+                    parse_uint32_value(fields[2], peer_port) && peer_port <= 65535 &&
+                    tcp_network != nullptr) {
+                    const bool authorized =
+                        (config.node_id == 1 && peer_id == 33) ||
+                        (config.node_id == 33 && peer_id == 1);
+                    if (!authorized) {
+                        activation_error = "runtime federation activation is restricted to nodes 1 and 33";
+                    } else if (config.federation_interface.empty()) {
+                        activation_error = "federation interface is not configured";
+                    } else {
+                        const std::string command = "ip link set dev " +
+                            config.federation_interface + " up";
+                        if (std::system(command.c_str()) != 0) {
+                            activation_error = "failed to enable federation interface";
+                        } else {
+                            const std::string expected_peer_link = config.node_id == 1
+                                ? "172.31.16.2" : "172.31.16.1";
+                            const std::string expected_peer_host = config.node_id == 1
+                                ? "10.90.0.33" : "10.90.0.1";
+                            if (fields[1] != expected_peer_host || fields[4] != expected_peer_link) {
+                                activation_error = "federation endpoint or link address is not authorized";
+                            } else {
+                                bool routes_ok = true;
+                                const uint32_t first = config.node_id == 1 ? 33 : 1;
+                                const uint32_t last = config.node_id == 1 ? 64 : 32;
+                                for (uint32_t target = first; target <= last; ++target) {
+                                    const std::string route = "ip route replace 10.90.0." +
+                                        std::to_string(target) + "/32 via " + fields[4] +
+                                        " dev " + config.federation_interface + " src 10.90.0." +
+                                        std::to_string(config.node_id);
+                                    if (std::system(route.c_str()) != 0) routes_ok = false;
+                                }
+                                TcpEndpoint endpoint{fields[1], static_cast<uint16_t>(peer_port)};
+                                if (!routes_ok) {
+                                    activation_error = "failed to install federation routes";
+                                } else if (tcp_network->add_runtime_neighbor(peer_id, endpoint, activation_error)) {
+                                    activation_status = "ok";
+                                }
+                            }
+                        }
+                    }
+                }
+                const uint64_t acknowledged_ns = steady_ns();
+                rsync_trace::record(config.node_id, "federation_activation",
+                                    {{"peer", std::to_string(peer_id)},
+                                     {"status", activation_status},
+                                     {"error", activation_error}});
+                atomic_write(control_root / "activated" /
+                                 ("node" + std::to_string(config.node_id) + ".tsv"),
+                             std::to_string(config.node_id) + "\t" +
+                                 std::to_string(peer_id) + "\t" + activation_status + "\t" +
+                                 std::to_string(acknowledged_ns) + "\t" + activation_error + "\n");
+            }
+            if (active_request.has_value()) {
+                const auto cancel_path = control_root / "cancel" /
+                    (active_request->request_index + "-node" +
+                     std::to_string(config.node_id) + ".marker");
+                if (std::filesystem::exists(cancel_path)) {
+                    const auto cancelled_index = active_request->request_index;
+                    rsync_trace::record(config.node_id, "experiment_request_cancel",
+                                        {{"experiment_request_index", cancelled_index},
+                                         {"key", active_request->key},
+                                         {"reason", "harness_isolation_probe_timeout"}});
+                    active_request.reset();
+                    atomic_write(control_root / "cancelled" /
+                                     (cancelled_index + "-node" +
+                                      std::to_string(config.node_id) + ".tsv"),
+                                 cancelled_index + "\t" +
+                                     std::to_string(config.node_id) + "\t" +
+                                     std::to_string(steady_ns()) + "\n");
+                }
+            }
+            const auto command_dir = control_root / "commands" /
+                ("node" + std::to_string(config.node_id));
+            // Application bookkeeping only, AFTER coordinator-proven natural expiry.
+            // Never cancel a QueryTable entry or alter its lifetime/forwarding policy.
+            if (async_mode) {
+                for (const auto& id : isolation_probe_ids) {
+                    const auto found = active_requests.find(id);
+                    if (found == active_requests.end()) continue;
+                    const auto path = control_root / "probe-retire" /
+                        (id + "-node" + std::to_string(config.node_id) + ".tsv");
+                    if (!std::filesystem::exists(path)) continue;
+                    std::ifstream input(path); std::string line; std::getline(input,line);
+                    const auto f = split_tab_line(line); uint64_t expiry = 0;
+                    if (f.size()!=4 || f[0]!=id || f[1]!=found->second.key ||
+                        f[3]!=config.experiment_schedule_hash || !parse_uint64_value(f[2],expiry))
+                        throw std::runtime_error("malformed probe retirement");
+                    experiment_probe::retirement(true,!std::filesystem::exists(control_root / "federation-post.enabled"),
+                        active_requests.size(),found->second.started_ns,expiry,steady_ns(),
+                        static_cast<uint64_t>(node_runtime_config.query_timeout.count())*1000000ULL);
+                    rsync_trace::record(config.node_id,"isolation_probe_retired",{{"experiment_request_index",id},{"key",f[1]},{"reason","natural-expiry-proven"}});
+                    active_requests.erase(found);
+                    atomic_write(control_root / "probe-retired" / (id + "-node" + std::to_string(config.node_id) + ".tsv"),
+                        id + "\t" + std::to_string(config.node_id) + "\t" + std::to_string(steady_ns()) + "\n");
+                }
+            }
+            if ((async_mode || !active_request.has_value()) && std::filesystem::exists(command_dir)) {
+                unsigned admitted_this_tick = 0;
+                std::vector<std::filesystem::path> commands;
+                for (const auto& entry : std::filesystem::directory_iterator(command_dir)) {
+                    if (entry.is_regular_file() && entry.path().extension() == ".tsv") {
+                        commands.push_back(entry.path());
+                    }
+                }
+                std::sort(commands.begin(), commands.end());
+                for (const auto& command : commands) {
+                    if (!processed_commands.insert(command.string()).second) continue;
+                    std::ifstream input(command);
+                    std::string line;
+                    std::getline(input, line);
+                    const auto fields = split_tab_line(line);
+                    if (fields.size() < 7 || fields[6] != config.experiment_schedule_hash) {
+                        std::cerr << "[rsync-node-dev] invalid experiment command "
+                                  << command << "\n";
+                        continue;
+                    }
+                    uint32_t owner = 0;
+                    uint64_t expected_size = 0;
+                    if (!parse_uint32_value(fields[3], owner) ||
+                        !parse_uint64_value(fields[4], expected_size)) {
+                        std::cerr << "[rsync-node-dev] invalid command numbers " << command << "\n";
+                        continue;
+                    }
+                    const auto request = ActiveExperimentRequest{
+                        fields[0], fields[2], expected_size, fields[5], steady_ns()};
+                    if (async_mode) {
+                        if (experiment_probe::reserved(fields[0])) {
+                            const auto permit = control_root / "probe-allowlist" / ("node" + std::to_string(config.node_id) + ".tsv");
+                            std::ifstream pin(permit); std::string allowed; std::getline(pin,allowed);
+                            if (!experiment_probe::identity(config.node_id,fields[0],fields[2]) ||
+                                !active_requests.empty() || std::filesystem::exists(control_root / "federation-post.enabled") ||
+                                allowed != fields[0]+"\t"+fields[2]+"\t"+config.experiment_schedule_hash)
+                                throw std::runtime_error("unauthorized isolation probe");
+                            isolation_probe_ids.insert(fields[0]);
+                            rsync_trace::record(config.node_id,"isolation_probe_registered",{{"experiment_request_index",fields[0]},{"key",fields[2]}});
+                        }
+                        if (!active_requests.emplace(fields[0], request).second)
+                            throw std::runtime_error("duplicate async application command");
+                    } else active_request = request;
+                    atomic_write(control_root / "started" / (fields[0] + ".tsv"),
+                        fields[0] + "\t" + std::to_string(config.node_id) + "\t" +
+                        std::to_string(request.started_ns) + "\n");
+                    rsync_trace::record(config.node_id, "experiment_request_start",
+                                        {{"experiment_request_index", fields[0]},
+                                         {"key", fields[2]},
+                                         {"src", std::to_string(config.node_id)},
+                                         {"dest", std::to_string(owner)},
+                                         {"value_bytes", std::to_string(expected_size)},
+                                         {"via", fields[1]}});
+                    try {
+                        if (async_mode) {
+                            if (fields[1] != "nc") throw std::runtime_error("unsupported async method");
+                            node.requestFileAsync(fields[2], fields[0]);
+                        } else if (fields[1] == "known-owner") {
+                            node.requestFileFromProvider(fields[2], owner);
+                        } else {
+                            node.requestFile({fields[2]});
+                        }
+                    } catch (const rsync_cache::BackendIndeterminate& e) {
+                        fatal_backend("backend-indeterminate", "backend_indeterminate", e.what());
+                        return EXIT_FAILURE;
+                    } catch (const rsync_cache::CacheUnavailable& e) {
+                        fatal_backend("backend-unavailable", "cache_unavailable", e.what());
+                        return EXIT_FAILURE;
+                    }
+                    if (!async_mode || ++admitted_this_tick >= 16) break;
+                }
+            }
+        }
+        for (const auto& event : config.scenario_requests) {
+            if (event.at_tick != tick) {
+                continue;
+            }
+
+            std::cout << "[rsync-node-dev] tick=" << tick
+                      << " firing scenario request for " << event.keys.size()
+                      << " key(s)\n";
+            for (const auto& key : event.keys) {
+                rsync_trace::record(config.node_id, "schedule_fire",
+                                    {{"key", key},
+                                     {"src", std::to_string(config.node_id)},
+                                     {"tick", std::to_string(tick)}});
+            }
+            try {
+                node.requestFile(event.keys);
+            } catch (const rsync_cache::BackendIndeterminate& e) {
+                fatal_backend("backend-indeterminate", "backend_indeterminate", e.what());
+                return EXIT_FAILURE;
+            } catch (const rsync_cache::CacheUnavailable& e) {
+                fatal_backend("backend-unavailable", "cache_unavailable", e.what());
+                return EXIT_FAILURE;
+            }
+        }
+        for (const auto& event : config.oracle_unicast_requests) {
+            if (event.at_tick != tick) {
+                continue;
+            }
+
+            std::cout << "[rsync-node-dev] tick=" << tick
+                      << " firing oracle-unicast request key=" << event.key
+                      << " provider=Node " << event.provider_node_id << "\n";
+            rsync_trace::record(config.node_id, "schedule_fire",
+                                {{"key", event.key},
+                                 {"src", std::to_string(config.node_id)},
+                                 {"dest", std::to_string(event.provider_node_id)},
+                                 {"tick", std::to_string(tick)},
+                                 {"via", "oracle_unicast"}});
+            try {
+                node.requestFileFromProvider(event.key, event.provider_node_id);
+            } catch (const rsync_cache::BackendIndeterminate& e) {
+                fatal_backend("backend-indeterminate", "backend_indeterminate", e.what());
+                return EXIT_FAILURE;
+            } catch (const rsync_cache::CacheUnavailable& e) {
+                fatal_backend("backend-unavailable", "cache_unavailable", e.what());
+                return EXIT_FAILURE;
+            }
+        }
+
+        if (trace_loop_ticks) {
+            rsync_trace::record(config.node_id, "process_one_start",
+                                {{"tick", std::to_string(tick)}});
+        }
+        bool protocol_activity = false;
+        try {
+            protocol_activity = node.processOne();
+        } catch (const rsync_cache::ImmutabilityViolation& e) {
+            // Unrecoverable correctness error: an incoming DATA packet
+            // contradicted an immutable local object. The store already emitted
+            // exactly one cache_key_conflict; nothing was delivered, forwarded,
+            // cached or marked satisfied for that packet. Record an explicit
+            // fatal marker for the experiment runner and exit non-zero.
+            std::cerr << "[rsync-node-dev] immutability violation: " << e.what() << "\n";
+            if (experiment_mode) {
+                atomic_write(control_root / "fatal" /
+                                 ("node" + std::to_string(config.node_id) +
+                                  ".immutability-violation"),
+                             std::string("immutability_violation\t") + e.logicalKey() +
+                                 "\t" + e.reason() + "\t" + e.tier() + "\t" +
+                                 std::to_string(e.incomingBytes()) + "\t" +
+                                 std::to_string(e.existingBytes()) + "\n");
+            }
+            rsync_trace::flush();
+            return EXIT_FAILURE;
+        } catch (const rsync_cache::BackendIndeterminate& e) {
+            // The backend may already have applied the operation. The store is
+            // poisoned and the run cannot produce valid data; stop explicitly.
+            // Already-confirmed operations were recorded before this throw.
+            fatal_backend("backend-indeterminate", "backend_indeterminate", e.what());
+            return EXIT_FAILURE;
+        } catch (const rsync_cache::CacheUnavailable& e) {
+            // A later call reached a store poisoned by an earlier indeterminate
+            // result. Same outcome: refuse to continue.
+            fatal_backend("backend-unavailable", "cache_unavailable", e.what());
+            return EXIT_FAILURE;
+        } catch (const std::exception& e) {
+            // Any other protocol-level exception also stops the run explicitly
+            // instead of terminating without a diagnostic.
+            std::cerr << "[rsync-node-dev] fatal protocol error: " << e.what() << "\n";
+            if (experiment_mode) {
+                atomic_write(control_root / "fatal" /
+                                 ("node" + std::to_string(config.node_id) + ".runtime-error"),
+                             std::string("runtime_error\t") + e.what() + "\n");
+            }
+            rsync_trace::flush();
+            return EXIT_FAILURE;
+        }
+        if (experiment_mode) {
+            if (protocol_activity) {
+                last_protocol_activity_ns = steady_ns();
+                if (!active_quiesce_ack.empty()) {
+                    std::error_code ignored;
+                    std::filesystem::remove(active_quiesce_ack, ignored);
+                }
+            }
+            const auto quiesce_dir = control_root / "quiesce";
+            if (std::filesystem::exists(quiesce_dir)) {
+                std::vector<std::filesystem::path> markers;
+                for (const auto& entry : std::filesystem::directory_iterator(quiesce_dir)) {
+                    if (entry.is_regular_file() && entry.path().extension() == ".marker") {
+                        markers.push_back(entry.path());
+                    }
+                }
+                std::sort(markers.begin(), markers.end());
+                if (!markers.empty()) {
+                    const auto index = markers.back().stem().string();
+                    if (index != active_quiesce_index) {
+                        active_quiesce_index = index;
+                        active_quiesce_ack = control_root / "quiesced" /
+                            (index + "-node" + std::to_string(config.node_id) + ".ack");
+                    }
+                    if ((!async_mode || active_requests.empty()) &&
+                        steady_ns() - last_protocol_activity_ns >= 100000000ULL &&
+                        !std::filesystem::exists(active_quiesce_ack)) {
+                        atomic_write(active_quiesce_ack,
+                                     index + "\t" + std::to_string(config.node_id) + "\t" +
+                                         std::to_string(last_protocol_activity_ns) + "\n");
+                    }
+                }
+            }
+        }
+        if (trace_loop_ticks) {
+            rsync_trace::record(config.node_id, "process_one_end",
+                                {{"tick", std::to_string(tick)}});
+        }
         if (config.loop_sleep_ms > 0) {
             std::this_thread::sleep_for(
                 std::chrono::milliseconds(config.loop_sleep_ms));
         }
     }
 
+    if (experiment_mode) {
+        rsync_trace::flush();
+        atomic_write(control_root / "stopped" /
+                         ("node" + std::to_string(config.node_id) + ".stopped"),
+                     "stopped\t" + std::to_string(config.node_id) + "\n");
+    }
     std::cout << "[rsync-node-dev] completed " << config.loop_iterations
               << " loop iteration(s)\n";
+    rsync_trace::flush();
     return EXIT_SUCCESS;
 }

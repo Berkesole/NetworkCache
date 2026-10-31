@@ -126,6 +126,8 @@ NAME_PREFIXES = ("Dockerfile.", "README.")
 
 def select(path: str, size: int, max_size: int) -> bool:
     parts = path.strip("/").split("/")
+    if parts[0] in {"archive", "release"}:
+        return False
     if any(
         part in EXCLUDED_DIRS
         or part.startswith(EXCLUDED_PREFIXES)

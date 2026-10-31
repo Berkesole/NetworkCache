@@ -1,6 +1,7 @@
 #include "tcp_network.hpp"
 
 #include "packet_codec.hpp"
+#include "../event_trace.hpp"
 #include "topology_parser.hpp"
 
 #include <arpa/inet.h>
@@ -8,6 +9,7 @@
 #include <netdb.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#include <poll.h>
 
 #include <algorithm>
 #include <cerrno>
@@ -18,6 +20,10 @@
 #include <sstream>
 #include <stdexcept>
 #include <utility>
+#include <chrono>
+#include <thread>
+#include <cstdlib>
+#include <filesystem>
 
 namespace {
 
@@ -164,6 +170,15 @@ const char* packet_type_to_string(PacketType type) {
     }
 }
 
+std::string format_packet_destination(const Packet& packet) {
+    if (packet.type == PacketType::REQUEST &&
+        packet.dest_node_id == kBroadcastNodeId) {
+        return "broadcast";
+    }
+
+    return "Node " + std::to_string(packet.dest_node_id);
+}
+
 std::string peer_label_from_address(const sockaddr_in& address) {
     char host_buffer[INET_ADDRSTRLEN] = {0};
     const char* host = ::inet_ntop(AF_INET, &address.sin_addr, host_buffer,
@@ -225,34 +240,38 @@ std::vector<sockaddr_in> resolve_ipv4_candidates(const TcpEndpoint& endpoint,
 
 }  // namespace
 
-TcpNetwork::TcpNetwork(uint32_t my_node_id)
-    : my_node_id_(my_node_id) {}
+TcpNetwork::TcpNetwork(uint32_t my_node_id, bool reuse_connections)
+    : my_node_id_(my_node_id), reuse_connections_(reuse_connections) {
+    // Experimental opt-in, frozen before lab startup. Default path stays legacy.
+    if (const char* control = std::getenv("RSYNC_EXPERIMENT_CONTROL_DIR")) {
+        reuse_connections_ = reuse_connections_ || std::filesystem::exists(
+            std::filesystem::path(control) / "tcp-connection-reuse.enabled");
+    }
+    std::cout << "pilot_connection_reuse=" << (reuse_connections_ ? 1 : 0) << std::endl;
+}
 
 TcpNetwork::~TcpNetwork() {
     close_runtime();
 }
 
+void TcpNetwork::begin_receive_batch() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    receive_batch_remaining_ = inbound_frames_.size();
+}
+
 std::unique_ptr<Packet> TcpNetwork::receive() {
-    bool should_poll = false;
-    {
-        std::lock_guard<std::mutex> lock(mutex_);
-        should_poll = configured_ && inbound_frames_.empty();
-    }
-
-    if (should_poll) {
-        accept_pending_connections();
-        read_pending_frames();
-    }
-
     EncodedFrame frame;
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        if (inbound_frames_.empty()) {
+        if (inbound_frames_.empty() ||
+            (receive_batch_remaining_ && *receive_batch_remaining_ == 0)) {
+            receive_batch_remaining_.reset();
             return nullptr;
         }
 
         frame = std::move(inbound_frames_.front());
         inbound_frames_.pop();
+        if (receive_batch_remaining_) --*receive_batch_remaining_;
     }
 
     try {
@@ -260,7 +279,7 @@ std::unique_ptr<Packet> TcpNetwork::receive() {
         std::cout << "TcpNetwork (ID " << my_node_id_
                   << "): received " << packet_type_to_string(packet->type)
                   << " packet from Node " << packet->src_node_id
-                  << " to Node " << packet->dest_node_id
+                  << " to " << format_packet_destination(*packet)
                   << " over TCP (" << frame.payload.size()
                   << " payload bytes)\n";
         return packet;
@@ -291,6 +310,10 @@ void TcpNetwork::send_direct(uint32_t dest_node_id, std::unique_ptr<Packet> pkt)
         return;
     }
 
+    // Stamp the egress node onto the packet header before serialization so
+    // the on-wire destination matches the actual next hop for unicast sends.
+    pkt->dest_node_id = dest_node_id;
+
     const PacketType packet_type = pkt->type;
 
     std::vector<uint8_t> payload;
@@ -310,42 +333,6 @@ void TcpNetwork::send_direct(uint32_t dest_node_id, std::unique_ptr<Packet> pkt)
         return;
     }
 
-    std::string resolve_error;
-    const auto candidates = resolve_ipv4_candidates(*endpoint, false, resolve_error);
-    if (candidates.empty()) {
-        std::cerr << "TcpNetwork (ID " << my_node_id_
-                  << "): failed to resolve destination host for Node "
-                  << dest_node_id << " (" << endpoint->host << ":"
-                  << endpoint->port << "): " << resolve_error << "\n";
-        return;
-    }
-
-    int socket_fd = -1;
-    int last_errno = 0;
-    for (const auto& address : candidates) {
-        socket_fd = ::socket(AF_INET, SOCK_STREAM, 0);
-        if (socket_fd < 0) {
-            last_errno = errno;
-            continue;
-        }
-
-        if (::connect(socket_fd, reinterpret_cast<const sockaddr*>(&address),
-                      sizeof(address)) == 0) {
-            break;
-        }
-
-        last_errno = errno;
-        close_fd(socket_fd);
-    }
-
-    if (socket_fd < 0) {
-        std::cerr << "TcpNetwork (ID " << my_node_id_
-                  << "): failed to connect to Node " << dest_node_id
-                  << " at " << endpoint->host << ":" << endpoint->port
-                  << ": " << std::strerror(last_errno) << "\n";
-        return;
-    }
-
     std::vector<uint8_t> wire_frame(sizeof(uint32_t) + payload.size());
     const auto frame_size = static_cast<uint32_t>(payload.size());
     wire_frame[0] = static_cast<uint8_t>((frame_size >> 24) & 0xFF);
@@ -354,21 +341,98 @@ void TcpNetwork::send_direct(uint32_t dest_node_id, std::unique_ptr<Packet> pkt)
     wire_frame[3] = static_cast<uint8_t>(frame_size & 0xFF);
     std::copy(payload.begin(), payload.end(), wire_frame.begin() + sizeof(uint32_t));
 
-    if (!send_all(socket_fd, wire_frame)) {
-        std::cerr << "TcpNetwork (ID " << my_node_id_
-                  << "): failed to send frame to Node " << dest_node_id
-                  << " at " << endpoint->host << ":" << endpoint->port
-                  << ": " << std::strerror(errno) << "\n";
-        close_fd(socket_fd);
-        return;
-    }
+    rsync_trace::record(my_node_id_, "pilot_transport_enqueue",
+        {{"packet_type", packet_type_to_string(packet_type)},
+         {"frame_bytes", std::to_string(wire_frame.size())},
+         {"dest", std::to_string(dest_node_id)}});
+    std::lock_guard<std::mutex> lock(mutex_);
+    outbound_admissions_.push_back(OutboundFrame{dest_node_id, *endpoint,
+        packet_type, std::move(wire_frame)});
+    ++outbound_count_;
+}
 
-    std::cout << "TcpNetwork (ID " << my_node_id_
-              << "): sent " << packet_type_to_string(packet_type)
-              << " packet to Node " << dest_node_id
-              << " over TCP at " << endpoint->host << ":" << endpoint->port
-              << " (" << payload.size() << " payload bytes)\n";
-    close_fd(socket_fd);
+bool TcpNetwork::has_pending_io() const { return outbound_count_.load() != 0; }
+
+void TcpNetwork::pump_outbound() {
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        for (auto& frame : outbound_admissions_)
+            outbound_peers_[frame.destination].push_back(std::move(frame));
+        outbound_admissions_.clear();
+    }
+    // FIFO per peer; different peers progress independently. No Node methods
+    // run on this thread, and no fixed application in-flight limit is imposed.
+    for (auto it = outbound_peers_.begin(); it != outbound_peers_.end();) {
+        auto& queue = it->second;
+        auto& f = queue.front();
+        int error = 0;
+        if (f.fd < 0 && reuse_connections_) {
+            auto idle = idle_outbound_.find(f.destination);
+            if (idle != idle_outbound_.end()) {
+                char byte;
+                const auto rc = ::recv(idle->second, &byte, 1, MSG_PEEK | MSG_DONTWAIT);
+                if (rc == 0 || (rc < 0 && !is_would_block(errno) && errno != EINTR)) {
+                    close_fd(idle->second); // Detected closed before writing: fresh connect is safe.
+                } else {
+                    f.fd = idle->second;
+                    ++connection_reuses_;
+                    rsync_trace::record(my_node_id_, "pilot_tcp_reuse", {{"dest",std::to_string(f.destination)}});
+                }
+                idle_outbound_.erase(idle);
+            }
+        }
+        if (f.fd < 0) {
+            std::string reason;
+            const auto addresses = resolve_ipv4_candidates(f.endpoint, false, reason);
+            error = EHOSTUNREACH;
+            for (const auto& address : addresses) {
+                f.fd = ::socket(AF_INET, SOCK_STREAM, 0);
+                if (f.fd < 0) { error = errno; continue; }
+                if (!set_non_blocking(f.fd)) { error=errno; close_fd(f.fd); continue; }
+                ++connection_attempts_;
+                rsync_trace::record(my_node_id_, "pilot_tcp_connect", {{"dest",std::to_string(f.destination)}});
+                const int rc = ::connect(f.fd, reinterpret_cast<const sockaddr*>(&address), sizeof(address));
+                if (rc == 0 || errno == EINPROGRESS) {
+                    f.connecting = rc != 0; error = 0; break;
+                }
+                error = errno; close_fd(f.fd);
+            }
+        }
+        if (!error && f.connecting) {
+            pollfd p{f.fd, POLLOUT, 0};
+            const int ready = ::poll(&p, 1, 0);
+            if (ready < 0 && errno != EINTR) error=errno;
+            if (ready > 0) {
+                socklen_t length = sizeof(error);
+                if (::getsockopt(f.fd, SOL_SOCKET, SO_ERROR, &error, &length) < 0) error=errno;
+                if (!error) f.connecting=false;
+            }
+        }
+        if (!error && !f.connecting) {
+            const ssize_t sent = ::send(f.fd, f.bytes.data()+f.offset,
+                f.bytes.size()-f.offset, MSG_NOSIGNAL);
+            if (sent > 0) f.offset += static_cast<std::size_t>(sent);
+            else if (sent == 0) error=EPIPE;
+            else if (errno!=EAGAIN && errno!=EWOULDBLOCK && errno!=EINTR) error=errno;
+        }
+        if (error || f.offset == f.bytes.size()) {
+            if (error) ++connection_errors_;
+            rsync_trace::record(my_node_id_, error ? "pilot_transport_error" : "pilot_wire_send",
+                {{"packet_type", packet_type_to_string(f.type)},
+                 {"frame_bytes", std::to_string(f.bytes.size())},
+                 {"dest", std::to_string(f.destination)},
+                 {"reason", error ? std::strerror(error) : ""}});
+            if (!error && reuse_connections_) {
+                idle_outbound_[f.destination] = f.fd;
+                f.fd = -1;
+            } else {
+                // Never replay a partially/ambiguously sent frame.
+                close_fd(f.fd);
+            }
+            queue.pop_front(); --outbound_count_;
+        }
+        if (queue.empty()) it=outbound_peers_.erase(it); else ++it;
+    }
 }
 
 void TcpNetwork::broadcast(std::unique_ptr<Packet> pkt) {
@@ -459,6 +523,7 @@ void TcpNetwork::configure_topology(const std::string& config_file_path, uint32_
         neighbors_ = it->second.neighbors;
         configured_ = true;
     }
+    start_io_thread();
 
     std::cout << "TcpNetwork (ID " << my_node_id_
               << "): listening on " << self_endpoint.host
@@ -497,7 +562,55 @@ void TcpNetwork::set_endpoint_overrides(std::map<uint32_t, TcpEndpoint> override
     endpoint_overrides_ = std::move(overrides);
 }
 
+bool TcpNetwork::add_runtime_neighbor(uint32_t node_id, const TcpEndpoint& endpoint,
+                                      std::string& error) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return merge_runtime_neighbor(my_node_id_, configured_, node_id, endpoint,
+                                  endpoints_, endpoint_sources_, neighbors_, error);
+}
+
+bool TcpNetwork::merge_runtime_neighbor(
+    uint32_t self_id, bool configured, uint32_t node_id, const TcpEndpoint& endpoint,
+    std::map<uint32_t, TcpEndpoint>& endpoints,
+    std::map<uint32_t, std::string>& endpoint_sources,
+    std::vector<uint32_t>& neighbors, std::string& error) {
+    if (!configured) {
+        error = "network is not configured";
+        return false;
+    }
+    if (node_id == 0 || node_id == self_id) {
+        error = "runtime neighbor id must be nonzero and different from self";
+        return false;
+    }
+    if (endpoint.host.empty() || endpoint.port == 0) {
+        error = "runtime neighbor endpoint is invalid";
+        return false;
+    }
+    const auto existing = endpoints.find(node_id);
+    if (existing != endpoints.end() &&
+        (existing->second.host != endpoint.host || existing->second.port != endpoint.port)) {
+        error = "runtime neighbor endpoint conflicts with existing endpoint";
+        return false;
+    }
+    if (existing == endpoints.end()) {
+        endpoints[node_id] = endpoint;
+        endpoint_sources[node_id] = "runtime-local-bootstrap";
+    }
+    if (std::find(neighbors.begin(), neighbors.end(), node_id) == neighbors.end()) {
+        neighbors.push_back(node_id);
+        std::sort(neighbors.begin(), neighbors.end());
+    }
+    error.clear();
+    return true;
+}
+
 void TcpNetwork::close_runtime() {
+    stop_io_thread();
+    for (auto& peer : idle_outbound_) close_fd(peer.second);
+    idle_outbound_.clear();
+    for (auto& peer : outbound_peers_)
+        for (auto& frame : peer.second) close_fd(frame.fd);
+    outbound_peers_.clear();
     close_fd(listener_fd_);
     for (auto& connection : inbound_connections_) {
         close_fd(connection.fd);
@@ -505,13 +618,38 @@ void TcpNetwork::close_runtime() {
     inbound_connections_.clear();
 
     std::lock_guard<std::mutex> lock(mutex_);
+    outbound_admissions_.clear();
+    outbound_count_.store(0);
     while (!inbound_frames_.empty()) {
         inbound_frames_.pop();
     }
+    receive_batch_remaining_.reset();
     neighbors_.clear();
     endpoints_.clear();
     endpoint_sources_.clear();
     configured_ = false;
+}
+
+void TcpNetwork::start_io_thread() {
+    stop_io_thread();
+    io_stop_.store(false);
+    io_thread_ = std::thread(&TcpNetwork::io_loop, this);
+}
+
+void TcpNetwork::stop_io_thread() {
+    io_stop_.store(true);
+    if (io_thread_.joinable()) {
+        io_thread_.join();
+    }
+}
+
+void TcpNetwork::io_loop() {
+    while (!io_stop_.load()) {
+        accept_pending_connections();
+        read_pending_frames();
+        pump_outbound();
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
 }
 
 void TcpNetwork::enqueue_frame(EncodedFrame frame) {

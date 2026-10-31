@@ -1,3 +1,15 @@
+# Triangle (3-node ring) topology
+# 三角环：最小有环拓扑
+#
+#   Node 1 --- Node 2
+#       \     /
+#        Node 3
+#
+# 验证目标：
+#   - REQUEST 不应在三角形里无限绕：靠 prev-hop exclusion + TTL
+#   - 单 batch 内 union 仍应正确（is_aggregated=true 的包不再被 union）
+# diameter = 1 (任意两点直接相连)；TTL=4 留足 detour buffer
+
 protocol:
   max_hop_count: 4
 

@@ -118,7 +118,12 @@ launch_app() {
     unset RSYNC_REQUEST_KEYS || true
   fi
 
-  nohup /app/build/rsync-node-dev >"${app_log}" 2>&1 &
+  nohup sh -c '
+    /app/build/rsync-node-dev 2>&1 |
+    while IFS= read -r line; do
+      printf "%s %s\n" "$(date -u +%Y-%m-%dT%H:%M:%S.%NZ)" "$line"
+    done
+  ' >"${app_log}" 2>&1 &
   app_pid="$!"
   printf '%s\n' "${app_pid}" >"${pid_file}"
   sleep 1

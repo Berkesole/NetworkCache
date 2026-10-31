@@ -11,8 +11,8 @@ locally reviewable snapshot before choosing where the archive should live.
 
 ## Layout
 
-- `mainline/` is the code from xiaoxin-ubuntu `/root/zzh/rsync`, branch
-  `experiments/finite-cache-v1`, commit `1b8b9753`. Only Git-tracked
+- The repository root is the code from xiaoxin-ubuntu `/root/zzh/rsync`,
+  branch `experiments/finite-cache-v1`, commit `1b8b9753`. Only Git-tracked
   non-paper source and configuration were exported.
 - `snapshots/<host>/<project>/` holds code snapshots from the experiment
   hosts. Their original Git metadata is represented in
