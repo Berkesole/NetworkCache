@@ -21,32 +21,10 @@
       "paper and vldb submodule",
       "CSV/TSV/JSONL/trace measurements",
       "raw, results, output, collected, derived, deliveries",
-      "evidence, workload, paper-asset summary, clock-probe, state, build and dependency directories",
+      "evidence, workload, state, build and dependency directories",
       "PDF, images, archives, logs, binaries and CMake caches"
     ],
-    "working_tree": "included; commit and dirty counts recorded per source",
-    "patches": {
-      "patches/vc/networkcache-r2-tracked.patch": {
-        "source": "vc/networkcache-r2",
-        "files": 10
-      },
-      "patches/vc-1/networkcache-r2-tracked.patch": {
-        "source": "vc-1/networkcache-r2",
-        "files": 10,
-        "identical_to": "patches/vc/networkcache-r2-tracked.patch"
-      },
-      "patches/simple-station/rsync-tracked.patch": {
-        "source": "simple-station/rsync",
-        "files": 13
-      }
-    },
-    "skipped_dirty_data": {
-      "vc-2/concurrency-pre64post96-v2": "220 tracked workload JSON/TSV changes",
-      "simple-station/concurrency-pre64post96-v1": "220 tracked workload JSON/TSV changes",
-      "vc-2/concurrency-supplement-v1": "299 untracked runtime artifacts, no tracked code changes",
-      "simple-station/concurrency-supplement-v1": "299 untracked runtime artifacts, no tracked code changes",
-      "xiaoxin-ubuntu/rsync": "74 untracked experiment/build artifacts plus paper submodule pointer"
-    }
+    "working_tree": "included; commit and dirty counts recorded per source"
   },
   "sources": [
     {
@@ -65,9 +43,9 @@
         "tracked_dirty": 0
       },
       "code": {
-        "file_count": 519,
-        "bytes": 3608666,
-        "content_sha256": "38743fbce2549495261107606aed9c2ce66c32bb248a1ced2d4ff275da44ece0"
+        "file_count": 526,
+        "bytes": 3630600,
+        "content_sha256": "61d9738440c4696dbce85e70f0e0609cfe19b40f9dea43f7a7b1d667aea57571"
       }
     },
     {
@@ -86,9 +64,9 @@
         "tracked_dirty": 0
       },
       "code": {
-        "file_count": 503,
-        "bytes": 3495718,
-        "content_sha256": "aa7dac931330b8f52a08ddc8bd697ea3ff8f1bcc4b933aeec2c79c80d803f788"
+        "file_count": 510,
+        "bytes": 3517652,
+        "content_sha256": "7a9f9ed01bfdf80e516e72198be2c924d7f898d5bbf953d67abd66226a2d5f9a"
       }
     },
     {
@@ -107,9 +85,9 @@
         "tracked_dirty": 220
       },
       "code": {
-        "file_count": 503,
-        "bytes": 3495719,
-        "content_sha256": "f1d906b34be3edbabe70c4a142df25aa298b338f42c04fde96914e5018366a6a"
+        "file_count": 510,
+        "bytes": 3517653,
+        "content_sha256": "126cec99a1882cb97c85942e727b4ca26a880f955624d7bc9a3c87935609e2fe"
       }
     },
     {
@@ -128,9 +106,9 @@
         "tracked_dirty": 0
       },
       "code": {
-        "file_count": 500,
-        "bytes": 3452919,
-        "content_sha256": "b7aeea6e4e621d75f11738ce378cbbe51ad88d46f6744ef2f09c6ca9f49373c3"
+        "file_count": 507,
+        "bytes": 3474853,
+        "content_sha256": "d898c5aa12a898b2c8ce275b0b4b9ae610959ebced59d06f9bea20f763274953"
       }
     },
     {
@@ -149,9 +127,9 @@
         "tracked_dirty": 0
       },
       "code": {
-        "file_count": 503,
-        "bytes": 3495548,
-        "content_sha256": "0934ec04ed0ea01419f4523f107ef2b38a245f1af1ab00096b157c7f8d807d60"
+        "file_count": 510,
+        "bytes": 3517482,
+        "content_sha256": "48eef12f91323ae54732dcf92e28e58ab490713bb4da0bc1bcbbbd37028fa678"
       }
     },
     {
@@ -164,9 +142,9 @@
         "kind": "non-git-working-tree"
       },
       "code": {
-        "file_count": 535,
-        "bytes": 4050757,
-        "content_sha256": "7862ada920ad6bf91e6825ac3f43d637fd39bee878daf2dda42aab7ed82e6f3b"
+        "file_count": 555,
+        "bytes": 4193371,
+        "content_sha256": "4508d46e810aa5e2b34c84d465f82a945f351dc5775a8ab8e1afa51020fb4d83"
       }
     },
     {
@@ -179,9 +157,9 @@
         "kind": "non-git-working-tree"
       },
       "code": {
-        "file_count": 537,
-        "bytes": 4067964,
-        "content_sha256": "4316f3fa5774c7fcb97f84e7d7255603fd05eef3d9b38f22e30880a8561e53da"
+        "file_count": 557,
+        "bytes": 4210578,
+        "content_sha256": "de716946f90776d80fdc9185b2e7dbc22fb33786c26817116abb20206f1159f5"
       }
     },
     {
@@ -194,9 +172,9 @@
         "kind": "non-git-working-tree"
       },
       "code": {
-        "file_count": 537,
-        "bytes": 4068081,
-        "content_sha256": "c1214151f5f4555df4ad7f2f1f483f8bbcc5319b804ed3b1f46c96e753b49d0e"
+        "file_count": 557,
+        "bytes": 4210695,
+        "content_sha256": "d2d9b8331d23144726805c8f1137864a6d528537702485b1cb260789df697941"
       }
     },
     {
@@ -224,9 +202,9 @@
         "kind": "non-git-working-tree"
       },
       "code": {
-        "file_count": 534,
-        "bytes": 4004037,
-        "content_sha256": "ff95dca7b3c2fb330b2ec5bcec3f7b329b0f21bdee3284eba10e8aa3f5ddd80e"
+        "file_count": 554,
+        "bytes": 4146651,
+        "content_sha256": "ff1c5dfc84801c7f1600d7f5b224bb1e0735da3ffe32a6722b6d01ee5888fe62"
       }
     },
     {
@@ -239,9 +217,9 @@
         "kind": "non-git-working-tree"
       },
       "code": {
-        "file_count": 540,
-        "bytes": 4118172,
-        "content_sha256": "cb4778626ef5616a477557845eebe513ffcdfad8f2f62f29e51ccea8526fe7ca"
+        "file_count": 560,
+        "bytes": 4260786,
+        "content_sha256": "4b153d97ddaf6373ee9a60120352f126d3ac5cbe79e6e51f4ff33b813bce08fd"
       }
     },
     {
@@ -275,9 +253,9 @@
         "tracked_dirty": 13
       },
       "code": {
-        "file_count": 591,
-        "bytes": 3237815,
-        "content_sha256": "f49b759c622324698aa258e8a3dada3dd14f83f740c1d5687f335750f0e37ebf"
+        "file_count": 598,
+        "bytes": 3259749,
+        "content_sha256": "4be748502361fdeb7c7d3dc505c22ad6bc990c1ddce233f61d678fad65874373"
       }
     },
     {
@@ -296,9 +274,9 @@
         "tracked_dirty": 10
       },
       "code": {
-        "file_count": 599,
-        "bytes": 3326156,
-        "content_sha256": "ccebe5cdeae23a34962359f7ad2061f90d0c88dd669cdb548c1c33d5c9bcf386"
+        "file_count": 606,
+        "bytes": 3348090,
+        "content_sha256": "a138acf407aa1bb95092be079db544398ee3c9637acf45989d94e653c576db90"
       }
     },
     {
@@ -317,9 +295,9 @@
         "tracked_dirty": 0
       },
       "code": {
-        "file_count": 384,
-        "bytes": 2463098,
-        "content_sha256": "ab4b9d68602ceccc79f33ed5b8d3946e8b20e7d2012881a72dddb3182ad6d14a"
+        "file_count": 391,
+        "bytes": 2485032,
+        "content_sha256": "fd0674c98ee71ba78f1d4a34a6a699a200fdfa43fbdaccc11e5023d5504cc612"
       }
     },
     {
@@ -338,9 +316,9 @@
         "tracked_dirty": 0
       },
       "code": {
-        "file_count": 391,
-        "bytes": 2536596,
-        "content_sha256": "e764e5e75752368ad7a2987a0b6797f63e1189e736fc64a375bbd7cfd3dbd3bf"
+        "file_count": 398,
+        "bytes": 2558530,
+        "content_sha256": "41b193020ab920032a54937bd6f8386f66c1741b12281793cf9762e612407270"
       }
     },
     {
@@ -359,9 +337,9 @@
         "tracked_dirty": 0
       },
       "code": {
-        "file_count": 400,
-        "bytes": 2610644,
-        "content_sha256": "6769053089cb9802c8dae919a3e053f48c99a5c7e0a6ce2ebe9761b3382a185e"
+        "file_count": 407,
+        "bytes": 2632578,
+        "content_sha256": "fb86384df8bd4fb53c839f58e6cc4f262381f09bc65804cbabd0621f71a50467"
       }
     },
     {
@@ -380,9 +358,9 @@
         "tracked_dirty": 0
       },
       "code": {
-        "file_count": 400,
-        "bytes": 2616154,
-        "content_sha256": "77329be921518267c2d4bac97f263877d5e9ca3bdf2b39e1997eca086124d362"
+        "file_count": 407,
+        "bytes": 2638088,
+        "content_sha256": "0cc1bdb8f435a2a2a23002a15b27c5f35797b80d0c0efa092eb185de4d73734f"
       }
     },
     {
@@ -401,9 +379,9 @@
         "tracked_dirty": 0
       },
       "code": {
-        "file_count": 408,
-        "bytes": 2693326,
-        "content_sha256": "7338c2b324a1cb49e3118287c2b0160c8457e53a118a28345d28a4e3acfa4d28"
+        "file_count": 415,
+        "bytes": 2715260,
+        "content_sha256": "f4f277a7def1a258373499a954d39ad436f1fd2e272122134f462538df58b580"
       }
     },
     {
@@ -422,9 +400,9 @@
         "tracked_dirty": 0
       },
       "code": {
-        "file_count": 418,
-        "bytes": 2779073,
-        "content_sha256": "050fb3a0564deeb974010b64cf3dd41450c0ce4355235df5c883e55d8af4049a"
+        "file_count": 425,
+        "bytes": 2801007,
+        "content_sha256": "c0fcd67ac99177d2ebfeea03dc60082b1c5afbdaa7e21ff566791e2246f7dece"
       }
     },
     {
@@ -443,9 +421,9 @@
         "tracked_dirty": 0
       },
       "code": {
-        "file_count": 428,
-        "bytes": 2867534,
-        "content_sha256": "91caf2bdbc1fd817277ab3b5c9f9badd7b061a7831452e3b545a0a563aa351cd"
+        "file_count": 435,
+        "bytes": 2889468,
+        "content_sha256": "9e132d70b7db499f2976b520137ce570c55d20357ee28370bcbbd1a9bbcdad70"
       }
     },
     {
@@ -464,9 +442,9 @@
         "tracked_dirty": 0
       },
       "code": {
-        "file_count": 440,
-        "bytes": 2964417,
-        "content_sha256": "c49780adef4e4a0cf5c8bdabb1c3ce3684c960b3eba068728f92d7cd03b8936c"
+        "file_count": 447,
+        "bytes": 2986351,
+        "content_sha256": "3fd0cce20d73d8472dfea873f24f4765c19b88bf767a1002993596a5d1f1c4a9"
       }
     },
     {
@@ -485,9 +463,9 @@
         "tracked_dirty": 0
       },
       "code": {
-        "file_count": 450,
-        "bytes": 3060186,
-        "content_sha256": "48e51a40435a6ef41526fb8d735ae5c4c387ee13eb90db888eff245a050750d6"
+        "file_count": 457,
+        "bytes": 3082120,
+        "content_sha256": "c66bbd591c5b3e7123b68f0e52b1b880d348fe09d2cabfddbb09af322529f153"
       }
     },
     {
@@ -506,9 +484,9 @@
         "tracked_dirty": 0
       },
       "code": {
-        "file_count": 508,
-        "bytes": 3535242,
-        "content_sha256": "d9c31b51085b37fd8c1aca91debd951aa0247de33bd150916de5975cecc00adc"
+        "file_count": 515,
+        "bytes": 3557176,
+        "content_sha256": "b0d87af2f66c83c51677b7b923c8d228282f07328844f6eae643b5aecde957d3"
       }
     },
     {
@@ -527,9 +505,9 @@
         "tracked_dirty": 220
       },
       "code": {
-        "file_count": 508,
-        "bytes": 3535243,
-        "content_sha256": "cf81e90c7d337c19da98e740358e3864c6846f9fd872fc0e14b3036e94db6ad4"
+        "file_count": 515,
+        "bytes": 3557177,
+        "content_sha256": "9534f4a367a84e65f39678a5bad2ca2ff3f44832f7611dbc4d4fe466c9fef64a"
       }
     },
     {
@@ -548,9 +526,9 @@
         "tracked_dirty": 0
       },
       "code": {
-        "file_count": 465,
-        "bytes": 3184996,
-        "content_sha256": "76b36b461497c1dc170d4a085627aada329f17dc8740c33cdaf0130812ff5ac1"
+        "file_count": 472,
+        "bytes": 3206930,
+        "content_sha256": "7f2275738f0fc02f58db41a6f15c8b2c34f6ef9a2b17969e65035d9db2bcd2e4"
       }
     },
     {
@@ -569,9 +547,9 @@
         "tracked_dirty": 0
       },
       "code": {
-        "file_count": 480,
-        "bytes": 3312166,
-        "content_sha256": "bf7d387a9becd1bfef84cc6647f6fd79297594cae65f874b9a79c2848384c2ac"
+        "file_count": 487,
+        "bytes": 3334100,
+        "content_sha256": "22f06d8a3809ccf1d96a644415c7ba48f6b4b9f1786410eb65ca800db80cfe8d"
       }
     },
     {
@@ -590,9 +568,9 @@
         "tracked_dirty": 0
       },
       "code": {
-        "file_count": 481,
-        "bytes": 3310669,
-        "content_sha256": "e50cc0fb066dc23cf1ec85d2bd729315cb2b320d3a6dff2c2d4410f3433590a2"
+        "file_count": 488,
+        "bytes": 3332603,
+        "content_sha256": "10b6814b13f216182923b40df13cf8aca0b2d38c3ec5022a3303533b042ea465"
       }
     },
     {
@@ -611,9 +589,9 @@
         "tracked_dirty": 0
       },
       "code": {
-        "file_count": 481,
-        "bytes": 3311967,
-        "content_sha256": "e0acf18bc38eed30246cee7274a6b0b8db4326869a1dbac907fb76de5f1294c1"
+        "file_count": 488,
+        "bytes": 3333901,
+        "content_sha256": "9df6e3bec04f691315c94b3ba959cbe8ca7de6a52d1593b1b6a05a9bc552792a"
       }
     },
     {
@@ -632,9 +610,9 @@
         "tracked_dirty": 0
       },
       "code": {
-        "file_count": 499,
-        "bytes": 3447921,
-        "content_sha256": "6755e257bc4f6e2652f2c9293209234289ef6b1a3cca8dd2df55c985dbad8c99"
+        "file_count": 506,
+        "bytes": 3469855,
+        "content_sha256": "9ed2dca9bb39b9cb4934be0da9136585813551d6a6cab1df40c1d3a8a79640e8"
       }
     },
     {
@@ -653,9 +631,9 @@
         "tracked_dirty": 0
       },
       "code": {
-        "file_count": 508,
-        "bytes": 3535083,
-        "content_sha256": "b5f56ea7988211b28c5d1e77ec83c4a52e1d0cabde87b3c1ff134b18031a73a5"
+        "file_count": 515,
+        "bytes": 3557017,
+        "content_sha256": "61473a213e8b6867cb19b926fdfdbcf773c23a8607a3471d21c67840e4025591"
       }
     },
     {
@@ -674,9 +652,9 @@
         "tracked_dirty": 0
       },
       "code": {
-        "file_count": 508,
-        "bytes": 3535083,
-        "content_sha256": "b5f56ea7988211b28c5d1e77ec83c4a52e1d0cabde87b3c1ff134b18031a73a5"
+        "file_count": 515,
+        "bytes": 3557017,
+        "content_sha256": "61473a213e8b6867cb19b926fdfdbcf773c23a8607a3471d21c67840e4025591"
       }
     },
     {
@@ -695,9 +673,9 @@
         "tracked_dirty": 10
       },
       "code": {
-        "file_count": 599,
-        "bytes": 3326160,
-        "content_sha256": "cf2d5d55f37cce099b98e3dff9d3e9e8166d9acce2985989e4e9fa818514928a"
+        "file_count": 606,
+        "bytes": 3348094,
+        "content_sha256": "19a486088d28316be4a41b637d62ad9c2e2c1778b26bbfc703d1c156fa91e7b0"
       }
     },
     {
@@ -716,9 +694,9 @@
         "tracked_dirty": 1
       },
       "code": {
-        "file_count": 751,
-        "bytes": 4880254,
-        "content_sha256": "f4355f3f67c48532a5c864cbcd473d00d18cb08df2efb693592b432ef8bef364"
+        "file_count": 771,
+        "bytes": 5022868,
+        "content_sha256": "07f723a64508fa1ebd65360b1d62651e4fc174199f59d1dfafb6865dc11c326c"
       }
     }
   ]

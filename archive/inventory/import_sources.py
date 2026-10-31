@@ -266,11 +266,16 @@ def selected_paths(spec: dict[str, str]) -> list[str]:
     ]
 
 
-def extract(spec: dict[str, str], paths: list[str], target: Path) -> None:
-    if target.exists():
+def extract(
+    spec: dict[str, str],
+    paths: list[str],
+    target: Path,
+    allow_existing: bool = False,
+) -> None:
+    if target.exists() and not allow_existing:
         raise FileExistsError(f"refusing to overwrite {target}")
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.mkdir()
+    target.mkdir(exist_ok=True)
     remote_list = b"\0".join(os.fsencode(path) for path in paths) + b"\0"
     root = shlex.quote(spec["remote_path"])
     ssh = subprocess.Popen(
@@ -322,18 +327,30 @@ def content_digest(target: Path) -> tuple[int, int, str]:
     return count, total, merged.hexdigest()
 
 
-def import_one(spec: dict[str, str]) -> dict[str, Any]:
+def import_one(spec: dict[str, str], allow_existing: bool = False) -> dict[str, Any]:
     print(f"Importing {spec['id']} ...", flush=True)
     metadata = git_metadata(spec)
     paths = selected_paths(spec)
     if not paths:
         raise RuntimeError(f"selector returned no files for {spec['id']}")
     target = ROOT / spec["target"]
-    extract(spec, paths, target)
+    extract(spec, paths, target, allow_existing=allow_existing)
     count, total, digest = content_digest(target)
     if count != len(paths):
         raise RuntimeError(
             f"imported {count} files but selected {len(paths)} for {spec['id']}"
+        )
+    imported = {
+        path.relative_to(target).as_posix()
+        for path in target.rglob("*")
+        if path.is_file() and not path.is_symlink()
+    }
+    if imported != set(paths):
+        missing = sorted(set(paths) - imported)
+        extra = sorted(imported - set(paths))
+        raise RuntimeError(
+            f"file-set mismatch for {spec['id']}: "
+            f"missing={missing[:5]} extra={extra[:5]}"
         )
     return {
         **spec,
@@ -370,6 +387,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--only", help="comma-separated source ids")
     parser.add_argument("--refresh", action="store_true")
+    parser.add_argument("--update-existing", action="store_true")
     args = parser.parse_args()
     if args.refresh:
         return refresh_manifest()
@@ -378,17 +396,10 @@ def main() -> int:
     for spec in source_specs():
         if only and spec["id"] not in only:
             continue
-        sources.append(import_one(spec))
+        sources.append(import_one(spec, allow_existing=args.update_existing))
     manifest_path = ROOT / "archive-manifest.json"
     existing = json.loads(manifest_path.read_text()) if manifest_path.exists() else {}
     by_id = {item["id"]: item for item in existing.get("sources", [])}
-    by_id.update(
-        {
-            item["id"]: item
-            for item in source_specs()
-            if not only or item["id"] in only
-        }
-    )
     by_id.update({item["id"]: item for item in sources})
     manifest = {
         "schema_version": 1,
@@ -418,10 +429,7 @@ def main() -> int:
             ],
             "working_tree": "included; commit and dirty counts recorded per source",
         },
-        "sources": sorted(
-            (item for item in by_id.values() if "code" in item),
-            key=lambda item: item["id"],
-        ),
+        "sources": sorted(by_id.values(), key=lambda item: item["id"]),
     }
     manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=True) + "\n")
     total_files = sum(item["code"]["file_count"] for item in manifest["sources"])

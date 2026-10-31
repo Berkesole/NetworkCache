@@ -64,6 +64,7 @@ EXCLUDED_DIRS = {
     "results",
     "output",
     "collected",
+    "checks",
     "derived",
     "deliveries",
     "delivery",
@@ -78,7 +79,6 @@ EXCLUDED_DIRS = {
     "state",
     "slots",
     "build",
-    "cache",
     "node_modules",
     "presentations",
     "reports",
@@ -89,7 +89,14 @@ EXCLUDED_DIRS = {
     "CMakeFiles",
 }
 
-RUN_DIR_PREFIXES = ("acceptance-", "final-", "round", "stage-")
+RUN_DIR_PREFIXES = (
+    "acceptance-",
+    "final-",
+    "offline-acceptance",
+    "round",
+    "stage-",
+    "supplementary-",
+)
 EXCLUDED_PREFIXES = ("build-",)
 DATA_NAME_PREFIXES = (
     "backend_snapshot",
@@ -98,6 +105,7 @@ DATA_NAME_PREFIXES = (
     "PROVENANCE",
     "process_fault_chain",
     "redis_acceptance_summary",
+    "active-scenario",
     "workload_manifest",
 )
 
